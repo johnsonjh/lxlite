@@ -1,13 +1,4 @@
-(****************************************************************************)
-(*  Title:       exe286.pas                                                 *)
-(*  Description: Data structure definitions for the OS/2 old executable     *)
-(*               file format (segmented model)                              *)
-(****************************************************************************)
-(*                  (C) Copyright IBM Corp 1984-1992                        *)
-(*               (C) Copyright Microsoft Corp 1984-1987                     *)
-(*            C->Pascal conversion (c) FRIENDS software, 1996               *)
-(****************************************************************************)
-{$AlignCode-,AlignData-,AlignRec-,G3+,Speed-,Frame-,Use32+}
+{$mode delphi}{$packrecords 1}
 Unit exe286;
 
 Interface uses MiscUtil;

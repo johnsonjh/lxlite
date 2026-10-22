@@ -1,11 +1,4 @@
-(****************************************************************************)
-(*  Title:       os2exe.pas                                                 *)
-(*  Description: OS/2 executables handling object: supports loading of      *)
-(*               both NE and LX files; supports writing of LX files only    *)
-(*                                                                          *)
-(*        Copyright (c) FRIENDS software, 1996   No Rights Reserved         *)
-(****************************************************************************)
-{&AlignCode-,AlignData-,AlignRec-,G3+,R-,Speed-,Frame-,Use32+}
+{$mode delphi}{$packrecords 1}{$H-}{$I-}
 Unit os2exe;
 
 Interface uses exe286, exe386, miscUtil, SysLib, Collect, Streams;
@@ -108,7 +101,7 @@ type
   Stub        : pByteArray;
   StubSize    : Longint;
   TimeStamp   : Longint;
-  FileAttr    : Longint;
+  FileAttr    : Word16;
   Header      : tLXheader;
   ObjTable    : pArrOfOT;
   ObjMap      : pArrOfOM;
@@ -159,7 +152,18 @@ type
   destructor  Destroy;virtual;
  end;
 
-Implementation uses Dos, {$IFDEF OS2}os2base, {$ENDIF} pack2, vpsyslow;
+Implementation uses Dos, {$IFDEF OS2}os2base, {$ENDIF} pack2;
+
+const
+  open_share_DenyWrite = $20;
+  open_access_ReadWrite = $02;
+  open_share_DenyReadWrite = $10;
+
+function MemAvail: Int64;
+begin
+  MemAvail := $7FFFFFFF;
+end;
+
 
 procedure tFixupCollection.FreeItem;
 begin
@@ -374,68 +378,56 @@ var
 { Trick: In FRAME- state BP register is not altered so we can }
 { address external data via [bp+XX]; however we must address }
 { it via var[bp][-4] because compiler thinks that BP is modified }
-function Search : boolean; assembler;
-asm             cld
-                mov     esi,srcData
-                mov     edi,esi
-                add     edi,tOf[-4] {!!! and so on !!!}
-                add     esi,sOf[-4]
-                xor     eax,eax
-                movzx   ecx,packLevel
-                cmp     cl,255
-                je      @@setStart
-                mov     ebx,edi
-                sub     ebx,esi
-                cmp     ebx,ecx
-                jbe     @@setStart
-                mov     eax,ebx
-                sub     eax,ecx
-@@setStart:     mov     MatchOff[-4],eax
-                add     esi,eax
-@@nextPatt:     push    esi
-                push    edi
-                mov     eax,srcDataSize
-                sub     eax,tOf[-4]
-                mov     ebx,edi
-                sub     ebx,esi
-                cmp     ebx,eax
-                ja      @@noMatch
-                xor     edx,edx
-                div     ebx
-                mov     edx,eax                 {EDX = EAX = max matches}
-@@nextMatch:    mov     ecx,ebx                 {EBX = ECX = pattern length}
-                repe    cmpsb
-                jne     @@notEQ
-                dec     eax
-                jnz     @@nextMatch
-@@notEQ:        cmp     eax,edx
-                je      @@noMatch
-                sub     eax,edx
-                neg     eax
-                inc     eax                     {EAX = number of actual matches}
-                mov     edx,ebx
-                db      $0F,$AF,$D8             {imul    ebx,eax}
-                sub     ebx,2+2
-                jc      @@noMatch
-                cmp     ebx,edx
-                jbe     @@noMatch
-                mov     MatchCnt[-4],eax
-                mov     MatchLen[-4],edx
-                pop     esi
-                pop     edi
-                mov     al,1
-                jmp     @@locEx
-@@noMatch:      pop     edi
-                pop     esi
-                inc     esi
-                inc     MatchOff[-4]
-                cmp     esi,edi
-                jb      @@nextPatt
-                mov     al,0
-@@locEx:
-end;
-{&uses none}
+function Search : boolean;
+var
+  rem, patternLen, actualMatches, maxMatches, i: Longint;
+  match: Boolean;
+begin
+  Search := False;
+  if packLevel <> 255 then
+  begin
+    if (tOf - sOf) > packLevel then MatchOff := (tOf - sOf) - packLevel
+    else MatchOff := 0;
+  end
+  else MatchOff := 0;
 
+  while sOf + MatchOff < tOf do
+  begin
+    patternLen := tOf - (sOf + MatchOff);
+    rem := srcDataSize - tOf;
+    if patternLen <= rem then
+    begin
+      maxMatches := rem div patternLen;
+      actualMatches := 0;
+      while actualMatches < maxMatches do
+      begin
+        match := True;
+        for i := 0 to patternLen - 1 do
+        begin
+          if src[sOf + MatchOff + i] <> src[tOf + actualMatches * patternLen + i] then
+          begin
+            match := False;
+            break;
+          end;
+        end;
+        if not match then break;
+        Inc(actualMatches);
+      end;
+
+      if actualMatches > 0 then
+      begin
+        if (actualMatches * patternLen - 4) > patternLen then
+        begin
+          MatchCnt := actualMatches + 1;
+          MatchLen := patternLen;
+          Search := True;
+          Exit;
+        end;
+      end;
+    end;
+    Inc(MatchOff);
+  end;
+end;
 function dstAvail(N : Longint) : boolean;
 begin
  dstAvail := dOf + N <= dstDataSize;
@@ -498,66 +490,37 @@ var
  dst         : tByteArray absolute dstData;
 
 {&uses esi,edi,ebx}
-function Search : boolean; assembler;
-asm             cld
-                mov     edx,srcDataSize
-                sub     edx,tOf[-4]
-                mov     al,0
-                cmp     edx,2
-                jbe     @@locEx
-                mov     esi,srcData
-                mov     edi,esi
-                add     esi,tOf[-4]
-                mov     ax,[esi]
-                and     eax,0FFFh
-                shl     eax,1
-                add     eax,ChainHead[-4]
-                and     maxMatchLen[-4],0
+function Search : boolean;
+var
+  rem, pos, hash, curLen: Longint;
+begin
+  Search := False;
+  rem := srcDataSize - tOf;
+  if rem <= 2 then Exit;
 
-@@nextSearch:   push    esi
-                movsx   edi,word ptr [eax]
-                cmp     edi,-1
-                je      @@endOfChain
-                mov     eax,edi
-                shl     eax,1
-                add     eax,Chain[-4]
-                add     edi,srcData
-                mov     ecx,edx
-                repe    cmpsb
-                jz      @@maxLen
-                pop     esi
-                sub     ecx,edx
-                neg     ecx
-                sub     edi,ecx
-                dec     ecx
-                cmp     ecx,maxMatchLen[-4]
-                jbe     @@nextSearch
-                sub     edi,srcData
-                mov     maxMatchLen[-4],ecx
-                mov     maxMatchPos[-4],edi
-                mov     ebx,tOf[-4]
-                dec     ebx
-                cmp     ebx,edi                 {Prefer RL encoding since it}
-                jne     @@nextSearch            {packs longer strings}
-                cmp     ecx,63                  {Strings up to 63 chars are always}
-                jbe     @@nextSearch            {packed effectively enough}
-                push    esi
-                jmp     @@endOfChain
+  hash := pWord16(@src[tOf])^ and $FFF;
+  maxMatchLen := 0;
+  pos := SmallInt(ChainHead^[hash]);
 
-@@maxLen:       sub     edi,edx
-                sub     edi,srcData
-                mov     maxMatchLen[-4],edx
-                mov     maxMatchPos[-4],edi
+  while pos <> -1 do
+  begin
+    curLen := 0;
+    while (curLen < rem) and (src[pos + curLen] = src[tOf + curLen]) do
+      Inc(curLen);
 
-@@endOfChain:   mov     al,0
-                cmp     maxMatchLen[-4],3
-                jb      @@noMatch
-                inc     al
-@@noMatch:      pop     esi
-@@locEx:
+    if curLen > maxMatchLen then
+    begin
+      maxMatchLen := curLen;
+      maxMatchPos := pos;
+      if (pos = tOf - 1) and (curLen > 63) then break;
+      if curLen = rem then break;
+    end;
+
+    pos := SmallInt(Chain^[pos]);
+  end;
+
+  if maxMatchLen >= 3 then Search := True;
 end;
-{&uses none}
-
 function dstAvail(N : Longint) : boolean;
 begin
  dstAvail := dOf + N <= dstDataSize;
@@ -587,6 +550,7 @@ end;
 begin
  PackMethod2 := FALSE;
  GetMem(Chain, srcDataSize * 2);
+ FillChar(Chain^, srcDataSize * 2, $FF);  { initialize all chain links to -1 (no entry) }
  GetMem(ChainHead, (1 shl 12) * 2);
  FillChar(ChainHead^, (1 shl 12) * 2, $FF);
  sOf := 0; dOf := 0;
@@ -639,7 +603,8 @@ begin
                  case byte(J) of
                   3  : begin
                         if not dstAvail(2 + tOf - sOf) then goto locEx;
-                        pWord16(@dst[dOf])^ := 1 + (tOf - sOf) shl 2 + (maxMatchLen - 3) shl 4 + (tOf - maxMatchPos) shl 7;
+                        pWord16(@dst[dOf])^ := Word16((1 + (tOf - sOf) shl 2 +
+                          (maxMatchLen - 3) shl 4 + (tOf - maxMatchPos) shl 7) and $FFFF);
                         linearMove(src[sOf], dst[dOf + 2], tOf - sOf);
                         Register(tOf, maxMatchLen);
                         Inc(dOf, 2 + tOf - sOf);
@@ -647,7 +612,8 @@ begin
                        end;
                   0  : begin
                         if not dstAvail(2) then goto locEx;
-                        pWord16(@dst[dOf])^ := 2 + (maxMatchLen - 3) shl 2 + (tOf - maxMatchPos) shl 4;
+                        pWord16(@dst[dOf])^ := Word16((2 + (maxMatchLen - 3) shl 2 +
+                          (tOf - maxMatchPos) shl 4) and $FFFF);
                         Register(tOf, maxMatchLen);
                         Inc(dOf, 2);
                         sOf := tOf + maxMatchLen;
@@ -655,7 +621,8 @@ begin
                   15 : begin
                         if not dstAvail(3 + tOf - sOf) then goto locEx;
                         J := MinL(maxMatchLen, 63);
-                        pWord16(@dst[dOf])^ := 3 + (tOf - sOf) shl 2 + (J shl 6) + (tOf - maxMatchPos) shl 12;
+                        pWord16(@dst[dOf])^ := Word16((3 + (tOf - sOf) shl 2 +
+                          (J shl 6) + (tOf - maxMatchPos) shl 12) and $FFFF);
                         dst[dOf + 2] := (tOf - maxMatchPos) shr 4;
                         linearMove(src[sOf], dst[dOf + 3], tOf - sOf);
                         Register(tOf, J);
@@ -728,7 +695,7 @@ end;
 
 {* Two utility procedures for the QuickSort routine: *}
 {* compare two pages and exchange two pages (below). *}
-Function lxCmpPages(var Buff; N1,N2 : longint) : boolean;
+Function lxCmpPages(var Buff; N1,N2 : Word) : boolean;
 var
  L1,L2 : Longint;
 begin
@@ -758,7 +725,7 @@ begin
  lxCmpPages := FALSE;
 end;
 
-Procedure lxXchgPages(var Buff; N1,N2 : longint);
+Procedure lxXchgPages(var Buff; N1,N2 : Word);
 begin
  with tLX(Buff) do
   XchgL(PageOrder^[N1], PageOrder^[N2]);
@@ -1019,7 +986,8 @@ begin
         FreeMem(FixRecSize, succ(Header.lxMpages) * sizeOf(Longint));
         FixRecSize := Pointer(FixRecTbl);
 
-        GetMem(FixRecTbl, Header.lxMpages * sizeOf(Longint));
+        { FixRecTbl holds native pointers, not 32-bit LX offsets. }
+        GetMem(FixRecTbl, Header.lxMpages * sizeOf(Pointer));
         For I := 1 to Header.lxMpages do {Read fixups for each page}
          begin
           L := FixRecSize^[pred(I)];
@@ -1187,7 +1155,7 @@ var
  Count   : Word16;
  tmpB,
  tmpPtr  : pByteArray;
- I,J,K,L : Longint;
+ I,J,K,L,jTmp : Longint;
  Fixup   : array[0..15] of pFixupCollection;
  tmpF,
  tmpF1   : pLXreloc;
@@ -1289,20 +1257,21 @@ begin
             nerRNam : begin
                        K := 0;
                        For J := 1 to ImportM^.Count do
-                        if Word16(ImportM^.At(pred(J))) = rel.ModIndx
+                        if Word16(PtrUInt(ImportM^.At(pred(J)))) = rel.ModIndx
                          then begin
                                AddTObjMod(J);
                                Inc(K); break;
                               end;
                        For J := 1 to ImportP^.Count do
-                        if Word16(ImportP^.At(pred(J))) = rel.Proc
+                        if Word16(PtrUInt(ImportP^.At(pred(J)))) = rel.Proc
                          then begin
                                L := 0;
-                               if J > 1
+                               jTmp := J;
+                               if jTmp > 1
                                 then repeat
-                                      Dec(J);
-                                      Inc(L, succ(length(pString(ImpProcTbl^.At(pred(J)))^)));
-                                     until J <= 1;
+                                      Dec(jTmp);
+                                      Inc(L, succ(length(pString(ImpProcTbl^.At(pred(jTmp)))^)));
+                                     until jTmp <= 1;
                                tmpF^.Flags := tmpF^.Flags or nr32bitOff;
                                tmpF^.Target.extRef.Proc := L;
                                Inc(K); break;
@@ -1360,7 +1329,7 @@ begin
                    else break;
                  until FALSE;
           end;
-   Inc(word(TmpPtr), 8);
+   TmpPtr := Pointer(PAnsiChar(TmpPtr) + 8);
   end;
  with ObjTable^[ObjNo] do
   For I := 0 to pred(oMapSize) do
@@ -1462,7 +1431,7 @@ begin
       (I = Header.lxStackObj)
     then Inc(L, Header.lxStackSize);
    with Header do Inc(lxMpages, pred(L + lxPageSize) div lxPageSize);
-   Inc(longint(neSeg), sizeOf(tNEseg));
+   neSeg := pNEseg(PAnsiChar(neSeg) + sizeOf(tNEseg));
   end;
 
  with Header do
@@ -1568,7 +1537,7 @@ begin
    FreeMem(tmpBuff, M);
    with ObjTable^[I] do
     oMapSize := succ(J - oPageMap);
-   Inc(longint(neSeg), sizeOf(tNEseg));
+   neSeg := pNEseg(PAnsiChar(neSeg) + sizeOf(tNEseg));
   end;
 
 { Convert resident name table }
@@ -1683,11 +1652,11 @@ begin
           if K <> 0
            then begin
                  ImpModTbl^.AtInsert(ImpModTbl^.Count, NewStr(S));
-                 ImportM^.Insert(Pointer(K));
+                 ImportM^.Insert(Pointer(PtrUInt(K)));
                 end
            else begin
                  ImpProcTbl^.AtInsert(ImpProcTbl^.Count, NewStr(S));
-                 ImportP^.Insert(Pointer(L));
+                 ImportP^.Insert(Pointer(PtrUInt(L)));
                 end;
           Inc(L, succ(length(S)));
           Dec(I, succ(length(S)));
@@ -1705,7 +1674,7 @@ begin
                 Res := lxeBadFixupTable;
                 break;
                end;
-   Inc(longint(neSeg), sizeOf(tNEseg));
+   neSeg := pNEseg(PAnsiChar(neSeg) + sizeOf(tNEseg));
   end;
  packFixups(pkfFixups + pkfFixupsVer2);
 
@@ -2074,7 +2043,7 @@ var
  EBR : pEntryTblRec;
 begin
  if PageOrder <> nil
-  then FreeMem(PageOrder, Header.lxMpages * sizeOf(Pointer));
+  then FreeMem(PageOrder, Header.lxMpages * sizeOf(Longint));
 
  if Pages <> nil
   then begin
@@ -2088,7 +2057,7 @@ begin
   then begin
         For I := 1 to Header.lxMPages do
          FreeMem(FixRecTbl^[pred(I)], FixRecSize^[pred(I)]);
-        FreeMem(FixRecTbl, Header.lxMpages * sizeOf(Longint));
+        FreeMem(FixRecTbl, Header.lxMpages * sizeOf(Pointer));
        end;
 
  if ImpProcTbl <> nil
@@ -2435,6 +2404,7 @@ var
  Fix    : pLXreloc;
  ST,SF  : Byte;
  baseSet: boolean;
+ foundDup : boolean;
  Src,Base,
  I,fixCount,
  Next   : longint;
@@ -2443,21 +2413,21 @@ var
 function Get8 : Byte;
 begin
  Get8 := FixTbl^[0];
- Inc(Longint(FixTbl));
+ FixTbl := pByteArray(PAnsiChar(FixTbl) + 1);
  Dec(FixSz);
 end;
 
 function Get16 : Word16;
 begin
  Get16 := pWord16(@FixTbl^[0])^;
- Inc(Longint(FixTbl), 2);
+ FixTbl := pByteArray(PAnsiChar(FixTbl) + 2);
  Dec(FixSz, 2);
 end;
 
 function Get32 : Word32;
 begin
  Get32 := pWord32(@FixTbl^[0])^;
- Inc(Longint(FixTbl), 4);
+ FixTbl := pByteArray(PAnsiChar(FixTbl) + 4);
  Dec(FixSz, 4);
 end;
 
@@ -2529,7 +2499,7 @@ begin
     then begin
           GetMem(Fix^.targets, Fix^.targetCount * sizeOf(Word16));
           Move(FixTbl^, Fix^.targets^, Fix^.targetCount * sizeOf(Word16));
-          Inc(Longint(FixTbl), Fix^.targetCount * sizeOf(Word16));
+          FixTbl := pByteArray(PAnsiChar(FixTbl) + Fix^.targetCount * sizeOf(Word16));
           Dec(FixSz, Fix^.targetCount * sizeOf(Word16));
          end;
 
@@ -2556,10 +2526,11 @@ begin
                    Base := Fix^.Target.intRef - (Next and $FFFFF);
                    baseSet := TRUE;
                   end;
+            foundDup := False;
             For I := fixCount to Fixups^.Count do
              if pLXreloc(Fixups^.At(pred(I)))^.sOffs = Src
-              then begin I := -1; break; end;
-            if (I = -1) or (succ(Fixups^.Count - fixCount) > Header.lxPageSize shr 2)
+              then begin foundDup := True; break; end;
+            if foundDup or (succ(Fixups^.Count - fixCount) > Header.lxPageSize shr 2)
              then break; {we have a loop or error here}
             New(newFix); newFix^ := Fix^;
             newFix^.sOffs := Src;
@@ -2780,7 +2751,7 @@ begin
             if (L <> K) or (L = $7F7F7F7F) then Continue;
 
             if not Prepare(F1)
-             then begin Fx^.AtFree(pred(J)); Dec(I); Continue; end;
+             then begin Fx^.AtFree(pred(J)); Continue; end;
 
             sO := F1^.sOffs; K := -1;
             while sO <= Header.lxPageSize - 4 do
@@ -2915,7 +2886,7 @@ begin
                      MemScanBwd(Pages^[pred(P)]^, Header.lxPageSize, 0), ps1)
                   then Inc(ps1, FixupsSize(Fx))
                   else ps1 := $7FFFFFFF;
-                 XchgL(Fx, aFx);
+                 Xchg(Fx, aFx, sizeOf(Pointer));
                  PackVer4;
                  ps2 := Header.lxPageSize;
                  if PackMethod2(Pages^[pred(P)]^, cPage^, Header.lxPageSize -
@@ -2923,7 +2894,7 @@ begin
                   then Inc(ps2, FixupsSize(Fx))
                   else ps2 := $7FFFFFFF;
                  if ps1 <= ps2
-                  then XchgL(Fx, aFx);
+                  then Xchg(Fx, aFx, sizeOf(Pointer));
                  Dispose(aFx, Destroy);
                 end
            else begin
@@ -3207,6 +3178,17 @@ begin
  P := N;
 end;
 
+procedure DelPointers(var P : pPointerArray; Item,Count : Longint);
+var
+ N : pPointerArray;
+begin
+ GetMem(N, pred(Count) * sizeOf(Pointer));
+ Move(P^, N^, pred(Item) * sizeOf(Pointer));
+ Move(P^[Item], N^[pred(Item)], (Count - Item) * sizeOf(Pointer));
+ FreeMem(P, Count * sizeOf(Pointer));
+ P := N;
+end;
+
 var
  I  : Longint;
  NF : pByteArray;
@@ -3214,7 +3196,7 @@ var
 begin
  if (PageNo > Header.lxMPages) or (PageNo = 0) then exit;
  FreeMem(Pages^[pred(PageNo)], ObjMap^[PageNo].PageSize);
- Del(pLongArray(Pages), PageNo, Header.lxMPages);
+ DelPointers(Pages, PageNo, Header.lxMPages);
  if PerPageCRC <> nil
   then Del(PerPageCRC, PageNo, Header.lxMPages);
 
@@ -3226,7 +3208,7 @@ begin
 
 { remove fixups for this page }
  FreeMem(FixRecTbl^[pred(PageNo)], FixRecSize^[pred(PageNo)]);
- Del(pLongArray(FixRecTbl), PageNo, Header.lxMPages);
+ DelPointers(FixRecTbl, PageNo, Header.lxMPages);
  Del(FixRecSize, PageNo, Header.lxMPages);
 
  For I := pred(Header.lxMPages) downto 0 do

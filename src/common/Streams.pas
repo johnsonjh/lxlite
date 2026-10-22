@@ -1,9 +1,4 @@
-{$A-,B-,D+,E-,F-,G-,I-,L+,N-,O-,P-,Q-,R-,S-,T-,V-,X+,Y+,Use32+}
-{様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様}
-{ Streams                                                                    }
-{ Portable source code (tested on DOS and OS/2)                              }
-{ Copyright (c) 1996 by Andrew Zabolotny, FRIENDS software                   }
-{様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様}
+{$mode delphi}{$H-}{$I-}
 Unit Streams;
 
 Interface uses miscUtil;
@@ -122,7 +117,7 @@ begin
         if Error <> steOK
          then begin
                Error := steOK;
-               bsz := minL(minL(maxAvail, $FFF0), bytes);
+               bsz := minL($FFF0, bytes);
                GetMem(buff, bsz);
                if buff <> nil
                 then begin
@@ -165,18 +160,23 @@ begin
   then Error := steNotApplicable;
 end;
 
-procedure tStream.PutStr;
+procedure tStream.PutStr(var S : string);
+var len: Byte;
 begin
- Put(S, succ(length(S)));
+ len := Length(S);
+ Put(len, 1);
+ if len > 0 then Put(S[1], len);
 end;
 
-function tStream.GetStr;
+function tStream.GetStr: string;
 var
- S : string;
+ S : ShortString;
+ len : Byte;
 begin
  S := '';
- Get(S[0], 1);
- Get(S[1], length(S));
+ Get(len, 1);
+ SetLength(S, len);
+ if len > 0 then Get(S[1], len);
  GetStr := S;
 end;
 
@@ -212,7 +212,7 @@ var
  i,rc : longint;
 begin
  CopyFrom := 0;
- bSz := minL($FFF0, maxAvail);
+ bSz := minL($FFF0, bytes);
  GetMem(Buff, bSz);
  if Buff = nil then begin Error := steNoMemory; exit; end;
  rc := 0;
@@ -320,7 +320,7 @@ end;
 
 function tFileStream.Name;
 begin
- Name := strPas(FileRec(F).Name);
+ Name := StrPas(PChar(@FileRec(F).Name));
 end;
 
 function tFileStream.Put;
@@ -424,9 +424,9 @@ begin
        end;
 end;
 
-function tFileStream.GetAttr;
+function tFileStream.GetAttr: longint;
 var
- W : word;
+ W : Word16;
 begin
  if Error = steOK
   then begin
@@ -437,11 +437,14 @@ begin
   else GetAttr := 0;
 end;
 
-procedure tFileStream.SetAttr;
+procedure tFileStream.SetAttr(Attr : longint);
+var
+ W : Word16;
 begin
  if (Error = steOK) and (Attr <> 0)
   then begin
-        SetFAttr(F, Attr);
+        W := Attr and $FFFF;
+        SetFAttr(F, W);
         if ioResult <> 0 then Error := steNotApplicable;
        end;
 end;

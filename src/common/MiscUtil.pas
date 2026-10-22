@@ -1,5 +1,4 @@
-{$A-,B-,D+,E-,F-,G+,I-,L+,N-,O-,P-,Q-,R-,S-,T-,V-,X+}
-{&AlignCode-,AlignData-,AlignRec-,G3+,Speed-,Frame-,Use32+}
+{$mode delphi}{$H-}
 Unit miscUtil;
 
 Interface
@@ -7,27 +6,25 @@ Interface
 const
 {$ifdef OS2}
  tickerFreq             = 100;  {ticker frequence in 100000/Freq (1000)}
-{$endIf}
+{$endif}
 {$ifdef WIN32}
  tickerFreq             = 100;  {ticker frequence in 100000/Freq (1000)}
-{$endIf}
-{$ifndef VIRTUALPASCAL}
- tickerFreq             = 5494; { = 100000/18.2 }
-{$endIf}
+{$endif}
+{$ifdef UNIX}
+ tickerFreq             = 100;
+{$endif}
 
 type
   SmallWord  = System.Word;
-  SmallInt   = System.Integer;
+  SmallInt   = System.SmallInt;
   Word16     = System.Word;
-  Integer16  = System.Integer;
+  Integer16  = System.SmallInt;
   Integer32  = System.Longint;
-  Word32     = System.Longint;
-{$IFDEF USE32}
+  Word32     = System.LongWord;
   Integer    = System.Longint;
-  Word       = System.Longint;
+  Word       = System.LongWord;
 const
   MaxInt     = MaxLongint;
-{$ENDIF}
 
 type
  tByteArray      = array[0..65500] of Byte;
@@ -56,180 +53,70 @@ type
  pInteger32      = ^Integer32;
  pString         = ^String;
 
- { Compare function for QuickSort. Return TRUE if Buff[N1] is 'greater    }
- { or _EQUAL_' than Buff[N2]. If it will return simply 'less' or 'greater'}
- { the function will cause a protection failure in the best case. If you  }
- { use the QuickSort with CmpFunc, you don`t need to specify element size }
  tCmpFunc        = Function(var Buff; N1,N2 : Word) : boolean;
- { Procedure which exchanges element N1 with N2 in Buff for QuickSort     }
- { Note that N1 and N2 in both cases are zero-based                       }
  tXchgProc       = Procedure(var Buff; N1,N2 : Word);
 
- { tObject base object, stolen :-) from TurboVision }
  pObject = ^tObject;
  tObject = object
   Constructor Create;
   Procedure   Zero;
   Procedure   Free; virtual;
   Destructor  Destroy; virtual;
-{$ifDef OS2}
- {Multi-thread support: detach an object.function(Parm : Pointer) : longint}
-  function    Detach(ObjFunc, Parm : Pointer; StackSize : Word; Ready : boolean) : Longint;
-{$endIf}
  end;
 
-{ Dynamic string [de]allocation routines }
  Function  NewStr(const S : String) : pString;
  Procedure DisposeStr(P : PString);
-{ Return interval in minutes between two events }
  Function  TimeInterval(sYear,sMonth,sDay,sHour,sMin,
                         fYear,fMonth,fDay,fHour,fMin : Word) : Longint;
 
-{ Quick sort routine. Element size must be one of 1,2,4 if cmpFunc is }
-{ not provided (is nil) - the array will be sorted in usual way (i.e. }
-{ from minimal to maximal value. If you use cmpFunc it`s also in your }
-{ responsability to supply a valid xchgProc pointer.                  }
-{ NOTE THAT BYTES, WORDS AND DWORDS WILL BE TREATED AS UNSIGNED VALUE }
-{$ifDef use32}
  Procedure QuickSort(var Buff; First,Last : Word; ElementSize : Byte;
                      cmpFunc : tCmpFunc; xchgProc : tXchgProc);
-{$endIf}
 
-{ Bit-manipulation routines }
-{&saves ebx,edx,esi,edi}
  Function  bitTest(var bitArray; BitNo : Word) : boolean;
  Procedure bitSet(var bitArray; BitNo : Word);
  Procedure bitReset(var bitArray; BitNo : Word);
 
-{Bit scan forward/reverse functions; return 255 if no set bits in A}
-{&saves all}
  Function  BitSF(A : Longint) : Byte;
  Function  BitSR(A : Longint) : Byte;
 
-{ Min/max functions }
-{&saves all}
  Function  minL(A,B : Longint) : Longint;
-{$ifDef VirtualPascal}
- Inline; begin if A <= B then minL := A else minL := B; end;
-{$endIf}
  Function  maxL(A,B : Longint) : Longint;
-{$ifDef VirtualPascal}
- Inline; begin if A >= B then maxL := A else maxL := B; end;
-{$endIf}
  Function  minI(A,B : Integer) : Integer;
-{$ifDef VirtualPascal}
- Inline; begin if A <= B then minI := A else minI := B; end;
-{$endIf}
  Function  maxI(A,B : Integer) : Integer;
-{$ifDef VirtualPascal}
- Inline; begin if A >= B then maxI := A else maxI := B; end;
-{$endIf}
 
-{ The same as System.Move but address always increments (i.e. CLD)   }
-{ Use it ONLY when there is no possibility of overlapping A & B      }
-{ or you intentionaly want to overlap them (i.e. in un/packers)      }
-{ NOTE: IT DOES NOT OPTIMIZE MOVES BY DWORDS/WORDS: DONT CHANGE THIS }
-{&saves eax,ebx,edx,esi,edi}
  Procedure linearMove(var A,B; Size : Word);
 
-{ Exchange bytes, words, double words and vars of any size }
-{&saves ebx,esi,edi}
  Procedure XchgB(var A,B);
  Procedure XchgW(var A,B);
  Procedure XchgL(var A,B);
  Procedure Xchg(var A,B; Size : Word);
 
-{ Compare two strings; return 0 if equal; positive if A>B and negative if A<B }
-{&saves ebx,edx,esi,edi}
  Function  MemCmp(var A,B; Size : Word) : Shortint;
-
-{ Search buffer Buff of length BuffLen for a Target of given length TargetLen }
-{&saves ebx,esi,edi}
  Function  Search(var Buff; BuffLen : Word; var Target; TargetLen : Word) : Word;
+ Function  MemScanFwd(var Buff; BuffLen : Word; Value : byte) : Word;
+ Function  MemScanBwd(var Buff; BuffLen : Word; Value : byte) : Word;
 
-{ Return number of "Value" bytes beginning from Buff to Buff+BuffLen }
-{&saves ebx,esi,edi}
- Function MemScanFwd(var Buff; BuffLen : Word; Value : byte) : Word;
-{ Return number of "Value" bytes beginning from Buff+BuffLen down to Buff }
-{&saves ebx,esi,edi}
- Function MemScanBwd(var Buff; BuffLen : Word; Value : byte) : Word;
+ Function  bTicker : Byte;
+ Function  wTicker : Word;
+ Function  lTicker : Longint;
 
-{$ifDef use32}
-{&saves ebx,esi,edi}
- Function bTicker : Byte;
- Function wTicker : Word;
- Function lTicker : Longint;
-{$else use32}
- Function bTicker : Byte;
- InLine( $8E/$06/seg0040/   { mov   es,seg0040   }
-         $26/$A0/$6C/$00);  { mov   ax,es:[6Ch] }
- Function wTicker : Word;
- InLine( $8E/$06/seg0040/   { mov   es,seg0040   }
-         $26/$A1/$6C/$00);  { mov   ax,es:[6Ch] }
- Function lTicker : Longint;
- InLine( $8E/$06/seg0040/   { mov   es,seg0040   }
-         $26/$A1/$6C/$00/   { mov   ax,es:[6Ch] }
-         $26/$8B/$16/$6E/$00);{mov  dx,es:[6Eh] }
-{$endIf use32}
-
-{ Trick: call a embedded (ONLY level 2!) procedure }
-{&saves ebx,esi,edi}
- Function level2call(Proc,Info : Pointer) : boolean;
+ Function  level2call(Proc,Info : Pointer) : boolean;
 
 Implementation 
 {$ifDef os2}   uses os2base; {$endIf}
 {$ifDef win32} uses windows; {$endIf}
+{$ifDef unix}  uses Unix; {$endIf}
 
-{±±±±±±±±±±±±±±±±±±±±±±±±±±±± High-level functions ±±±±±±±±±±±±±±±±±±±±±±±±±±}
 constructor tObject.Create;
 begin
  Zero;
 end;
 
 procedure tObject.Zero;
-type Image = record
-      Link : Word;
-      Data : record end;
-     end;
 begin
- FillChar(Image(Self).Data, SizeOf(Self) - SizeOf(TObject), 0);
+ if SizeOf(Self) > SizeOf(tObject) then
+   FillChar((PAnsiChar(@Self) + SizeOf(tObject))^, SizeOf(Self) - SizeOf(tObject), 0);
 end;
-
-{$ifDef OS2}
-type
-     pThreadParmBlock = ^tThreadParmBlock;
-     tThreadParmBlock = record
-      Func,Self,Parm : Pointer;
-     end;
-
-function stubThread(ParmBlock : Pointer) : Longint; assembler;
-{&FRAME-} {&USES none} {&SAVES ebx,esi,edi}
-asm             mov    eax,ParmBlock
-                push   [eax].tThreadParmBlock.Parm
-                push   [eax].tThreadParmBlock.Self
-                push   [eax].tThreadParmBlock.Func
-                push   eax
-                push   type tThreadParmBlock
-                call   _MemFree
-                pop    eax
-                call   eax
-end;
-
-function tObject.Detach;
-var
- tpb : pThreadParmBlock;
- tid : Longint;
-begin
- New(tpb);
- tpb^.Func := ObjFunc;
- tpb^.Self := @Self;
- tpb^.Parm := Parm;
- tid := 0;
- BeginThread(nil, StackSize, stubThread, tpb,
-  create_Suspended * byte(not Ready) + stack_Sparse, tid);
- Detach := tid;
-end;
-{$endIf}
 
 procedure tObject.Free;
 begin
@@ -242,11 +129,11 @@ end;
 
 const EmptyStr : string[1] = '';
 
-Function NewStr;
+Function NewStr(const S : String) : pString;
 var p : PString;
 begin
  if S = ''
-  then p := @EmptyStr                { to allow length() call on empty strings }
+  then p := @EmptyStr
   else begin
         GetMem(p, succ(length(S)));
         p^ := S;
@@ -254,10 +141,9 @@ begin
  NewStr := p;
 end;
 
-Procedure DisposeStr;
+Procedure DisposeStr(P : PString);
 begin
- if p<>@EmptyStr then FreeMem(p, succ(integer(length(p^))));
- p := nil;
+ if (P <> nil) and (p <> @EmptyStr) then FreeMem(p, succ(integer(length(p^))));
 end;
 
 Function TimeInterval(sYear,sMonth,sDay,sHour,sMin,
@@ -327,19 +213,26 @@ begin
  TimeInterval := tI;
 end;
 
-{±±±±±±±±±±±±±±±±±±±±±±± Compiler-specific functions ±±±±±±±±±±±±±±±±±±±±±±±}
-{$ifDef use32}
-
 Function lTicker : Longint;
+{$IFDEF OS2}
 var L : Longint;
 begin
-{$IFDEF OS2}
  DosQuerySysInfo(qsv_Ms_Count, qsv_Ms_Count, L, SizeOf(L));
  lTicker := L;
-{$ELSE}
- lTicker := GetTickCount;
-{$ENDIF}
 end;
+{$ELSE}
+{$IFDEF UNIX}
+var tv: timeval;
+begin
+ fpgettimeofday(@tv, nil);
+ lTicker := Longint(tv.tv_sec * 1000 + tv.tv_usec div 1000);
+end;
+{$ELSE}
+begin
+ lTicker := GetTickCount;
+end;
+{$ENDIF}
+{$ENDIF}
 
 Function wTicker : Word;
 begin
@@ -351,8 +244,20 @@ begin
  bTicker := lTicker and $FF;
 end;
 
+Function minL(A,B : Longint) : Longint;
+begin if A <= B then minL := A else minL := B; end;
 
-Procedure QuickSort;
+Function maxL(A,B : Longint) : Longint;
+begin if A >= B then maxL := A else maxL := B; end;
+
+Function minI(A,B : Integer) : Integer;
+begin if A <= B then minI := A else minI := B; end;
+
+Function maxI(A,B : Integer) : Integer;
+begin if A >= B then maxI := A else maxI := B; end;
+
+Procedure QuickSort(var Buff; First,Last : Word; ElementSize : Byte;
+                    cmpFunc : tCmpFunc; xchgProc : tXchgProc);
 
 function CmpInt(var Buff; N1,N2:Word):boolean;
 begin
@@ -360,6 +265,7 @@ begin
   1: cmpInt := tByteArray(Buff)[N1] >= tByteArray(Buff)[N2];
   2: cmpInt := tWord16Array(Buff)[N1] >= tWord16Array(Buff)[N2];
   4: cmpInt := tWordArray(Buff)[N1] >= tWordArray(Buff)[N2];
+  else cmpInt := True;
   end;
 end;
 
@@ -386,7 +292,6 @@ begin
         while (i<j) and CmpFunc(Buff,j,med) do dec(j);
         while (i<j) and not CmpFunc(Buff,i,med) do inc(i);
         if i>=j then break;
-        { swapping [i] and [j] values; update med }
         if med=i then med:=j else if med=j then med:=i;
         XchgProc(Buff,i,j);
     end;
@@ -394,442 +299,195 @@ begin
     QuickSort2(j+1,Last);
 end;
 
-
 begin
     if @CmpFunc=nil then
         case ElementSize of
-          1,2,4:  // CmpFunc := CmpInt;
-          asm
-            mov eax, offset CmpInt
-            mov CmpFunc, eax
-          end;
+          1,2,4: CmpFunc := @CmpInt;
           else Exit;
         end;
 
     if @XchgProc=nil then
         case ElementSize of
-          1,2,4: // XchgProc := xchgInt;
-          asm
-            mov eax, offset XchgInt
-            mov XchgProc, eax
-          end;
+          1,2,4: XchgProc := @XchgInt;
           else Exit;
         end;
 
     QuickSort2(First,Last);
 end;
 
-
-{±±±±±±±±±±±±±±±±±±±±±±±±±±±± Low-level functions ±±±±±±±±±±±±±±±±±±±±±±±±±±±}
-Function bitTest; assembler;
-asm             mov     eax,bitArray
-                mov     ecx,bitNo
-                bt      [eax],ecx
-                setc    al
-end;
-
-Procedure bitSet; assembler;
-asm             mov     eax,bitArray
-                mov     ecx,bitNo
-                bts     [eax],ecx
-end;
-
-Procedure bitReset; assembler;
-asm             mov     eax,bitArray
-                mov     ecx,bitNo
-                btr     [eax],ecx
-end;
-
-Procedure XchgB(var a,b); assembler;
-asm             mov     ecx,A
-                mov     edx,B
-                mov     al,[ecx]
-                xchg    al,[edx]
-                mov     [ecx],al
-end;
-
-Procedure XchgW(var a,b); assembler;
-asm             mov     ecx,A
-                mov     edx,B
-                mov     ax,[ecx]
-                xchg    ax,[edx]
-                mov     [ecx],ax
-end;
-
-Procedure XchgL; assembler;
-asm             mov     ecx,A
-                mov     edx,B
-                mov     eax,[ecx]
-                xchg    eax,[edx]
-                mov     [ecx],eax
-end;
-
-{&uses ebx}
-Procedure Xchg(var A,B; Size : Word); assembler;
-asm             mov     ebx,A
-                mov     edx,B
-                mov     ecx,Size
-@@next:         mov     al,[ebx]
-                xchg    al,[edx]
-                mov     [ebx],al
-                inc     ebx
-                inc     edx
-                loop    @@next
-end;
-
-{&uses esi,edi}
-Procedure linearMove; assembler;
-asm             cld
-                mov     esi,A
-                mov     edi,B
-                mov     ecx,Size
-                rep     movsb
-end;
-
-{&uses none}
-Function BitSF; assembler;
-asm             mov     eax,A
-                bsf     eax,eax
-                jnz     @@ok
-                dec     al
-@@ok:
-end;
-
-Function BitSR; assembler;
-asm             mov     eax,A
-                bsr     eax,eax
-                jnz     @@ok
-                dec     al
-@@ok:
-end;
-
-{&uses esi,edi}
-Function MemCmp; assembler;
-asm             cld
-                mov    esi,A
-                mov    edi,B
-                mov    ecx,Size
-                repe   cmpsb
-                lahf
-                mov    al,ah
-                and    al,0C0h         {Dirty trick :)}
-                xor    al,040h
-end;
-
-{&uses esi,edi}
-Function Search; assembler;
-asm             cld
-                mov     edi,Buff
-                mov     ecx,BuffLen
-                sub     ecx,TargetLen
-                jbe     @@notFound
-                inc     ecx
-                mov     esi,Target
-                mov     al,[esi]
-@@Scan:         repne   scasb
-                jne     @@notFound
-                push    ecx
-                push    esi
-                push    edi
-                dec     edi
-                mov     ecx,TargetLen[4+4+4]
-                repe    cmpsb
-                pop     edi
-                pop     esi
-                pop     ecx
-                jne     @@Scan
-                dec     edi
-                sub     edi,Buff
-                mov     eax,edi
-                jmp     @@locEx
-@@notFound:     mov     eax,-1
-@@locEx:
-end;
-
-{&uses none}
-function level2call(Proc,Info : Pointer) : boolean; assembler;
-asm             push    ebp
-                mov     ebp,[ebp]
-                push    Info[4]
-                call    Proc[8]
-                pop     ebp
-end;
-
-{&uses edi}
-Function MemScanFwd; assembler;
-asm             cld
-                mov     edi,Buff
-                mov     ecx,BuffLen
-                mov     al,Value
-                repe    scasb
-                setne   al
-                movzx   eax,al
-                sub     edi,eax
-                sub     edi,Buff
-                mov     eax,edi
-end;
-
-{&uses edi}
-Function MemScanBwd; assembler;
-asm             std
-                mov     edi,Buff
-                mov     ecx,BuffLen
-                jecxz   @@zeroLen
-                lea     edi,[edi+ecx-1]
-                mov     al,Value
-                repe    scasb
-                setnz   al
-                movzx   eax,al
-                add     edi,eax
-                inc     edi
-@@zeroLen:      sub     edi,Buff
-                mov     eax,BuffLen
-                sub     eax,edi
-                cld
-end;
-{&uses none}
-{$else €€€€€€€€€€€ Implementation specific for Borland Pascal 7.0 €€€€€€€€€€€}
-
-Procedure bitSet; assembler;
-asm             les     di,bitArray
-                mov     bx,bitNo
-                cmp     test8086,2
-                jb      @@8086
-                db      $26,$0F,$AB,$1D {bts es:[di],bx}
-                jmp     @@locEx
-
-@@8086:         mov     cl,bl
-                shr     bx,1
-                shr     bx,1
-                shr     bx,1
-                and     cl,7
-                mov     al,00000001b
-                rol     al,cl
-                or      es:[bx+di],al
-@@locEx:
-end;
-
-Procedure bitReset; assembler;
-asm             les     di,bitArray
-                mov     bx,bitNo
-                cmp     test8086,2
-                jb      @@8086
-                db      $26,$0F,$B3,$1D {btr es:[di],bx}
-                jmp     @@locEx
-
-@@8086:         mov     cl,bl
-                shr     bx,1
-                shr     bx,1
-                shr     bx,1
-                and     cl,7
-                mov     al,11111110b
-                rol     al,cl
-                and     es:[bx+di],al
-@@locEx:
-end;
-
-Function bitTest; assembler;
-asm             les     di,bitArray
-                mov     bx,bitNo
-                cmp     test8086,2
-                jb      @@8086
-                db      $26,$0F,$A3,$1D {bt es:[di],bx}
-                db      $0F,$92,$C0     {setc al}
-                jmp     @@locEx
-
-@@8086:         mov     cl,bl
-                shr     bx,1
-                shr     bx,1
-                shr     bx,1
-                and     cl,7
-                mov     al,00000001b
-                rol     al,cl
-                test    es:[bx+di],al
-                mov     al,0
-                jz      @@locEx
-                inc     al
-@@locEx:
-end;
-
-Function bitSF; assembler;
-asm      db $66;mov     ax,A.word
-         db $66,$0F,$BC,$C0 {bsf eax,eax}
-                jnz     @@ok
-                dec     al
-@@ok:
-end;
-
-Function bitSR; assembler;
-asm      db $66;mov     ax,A.word
-         db $66,$0F,$BD,$C0 {bsr eax,eax}
-                jnz     @@ok
-                dec     al
-@@ok:
-end;
-
-Function MemCmp; assembler;
-asm             cld
-                push    ds
-                lds     si,A
-                les     di,B
-                mov     cx,Size
-                repe    cmpsb
-                pop     ds
-                lahf
-                mov     al,ah
-                and     al,0C0h {Dirty trick :)}
-                xor     al,040h
-end;
-
-Function Search; assembler;
-asm             cld
-                push    ds
-                les     di,Buff
-                mov     cx,BuffLen
-                sub     cx,TargetLen
-                jbe     @@NotFound
-                inc     cx
-                lds     si,Target
-                mov     al,[si]
-@@Scan:         repne   scasb
-                jne     @@NotFound
-                push    cx
-                push    si
-                push    di
-                dec     di
-                mov     cx,TargetLen
-                repe    cmpsb
-                pop     di
-                pop     si
-                pop     cx
-                jne     @@Scan
-                dec     di
-                sub     di,Buff.word
-                mov     ax,di
-                jmp     @@locEx
-@@NotFound:     mov     ax,-1
-@@locEx:        pop     ds
-end;
-
-Procedure XchgB(var a,b); assembler;
-asm             push    ds
-                les     di,a
-                lds     si,b
-                mov     al,es:[di]
-                xchg    al,ds:[si]
-                cld
-                stosb
-                pop     ds
-end;
-
-Procedure XchgW(var a,b); assembler;
-asm             push    ds
-                les     di,a
-                lds     si,b
-                mov     ax,es:[di]
-                xchg    ax,ds:[si]
-                cld
-                stosw
-                pop     ds
-end;
-
-Procedure XchgL(var a,b); assembler;
-asm             push    ds
-                les     di,a
-                lds     si,b
-                mov     ax,es:[di]
-                xchg    ax,ds:[si]
-                cld
-                stosw
-                mov     ax,es:[di]
-                xchg    ax,ds:[si+2]
-                stosw
-                pop     ds
-end;
-
-Procedure Xchg(var A,B; Size : Word); assembler;
-asm             push    ds
-                lds     si,A
-                les     di,B
-                mov     cx,Size
-@@1:            mov     al,ds:[si]
-                xchg    es:[di],al
-                mov     ds:[si],al
-                inc     si
-                inc     di
-                loop    @@1
-                pop     ds
-end;
-
-Procedure linearMove; assembler;
-asm             cld
-                push    ds
-                lds     si,A
-                les     di,B
-                mov     cx,Size
-                rep     movsb
-                pop     ds
-end;
-
-Function  minL(A,B : Longint) : Longint;
+Function bitTest(var bitArray; BitNo : Word) : boolean;
 begin
- if A <= B then minL := A else minL := B;
+  bitTest := (pByteArray(@bitArray)^[BitNo shr 3] and (1 shl (BitNo and 7))) <> 0;
 end;
 
-Function  maxL(A,B : Longint) : Longint;
+Procedure bitSet(var bitArray; BitNo : Word);
 begin
- if A >= B then maxL := A else maxL := B;
+  pByteArray(@bitArray)^[BitNo shr 3] := pByteArray(@bitArray)^[BitNo shr 3] or (1 shl (BitNo and 7));
 end;
 
-Function  minI;
+Procedure bitReset(var bitArray; BitNo : Word);
 begin
- if A <= B then minI := A else minI := B;
+  pByteArray(@bitArray)^[BitNo shr 3] := pByteArray(@bitArray)^[BitNo shr 3] and not (1 shl (BitNo and 7));
 end;
 
-Function  maxI;
+Procedure XchgB(var a,b);
+var T : Byte;
 begin
- if A >= B then maxI := A else maxI := B;
+  T := Byte(A); Byte(A) := Byte(B); Byte(B) := T;
 end;
 
-function level2call(Proc,Info : Pointer) : boolean; assembler;
-asm             push    bp
-                push    Info[2].word
-                push    Info[0].word
-                mov     bx,[bp]
-                push    ss:[bx].word
-                call    Proc
-                pop     bp
+Procedure XchgW(var a,b);
+var T : Word16;
+begin
+  T := Word16(A); Word16(A) := Word16(B); Word16(B) := T;
 end;
 
-Function MemScanFwd; assembler;
-asm             cld
-                les     di,Buff
-                mov     cx,BuffLen
-                mov     al,Value
-                repe    scasb
-                je      @@1
-                dec     di
-@@1:            sub     di,word ptr Buff
-                mov     ax,di
+Procedure XchgL(var a,b);
+var T : Longint;
+begin
+  T := Longint(A); Longint(A) := Longint(B); Longint(B) := T;
 end;
 
-Function MemScanBwd; assembler;
-asm             std
-                les     di,Buff
-                mov     cx,BuffLen
-                add     di,cx
-                dec     di
-                mov     al,Value
-                repe    scasb
-                je      @@1
-                inc     di
-@@1:            inc     di
-                sub     di,word ptr Buff
-                mov     ax,BuffLen
-                sub     ax,di
-                cld
+Procedure Xchg(var A,B; Size : Word);
+var
+  pA, pB : PByteArray;
+  T : Byte;
+  I : Word;
+begin
+  if Size = 0 then Exit;
+  pA := @A; pB := @B;
+  for I := 0 to Size - 1 do
+  begin
+    T := pA^[I]; pA^[I] := pB^[I]; pB^[I] := T;
+  end;
 end;
-{$endIf €€€€€€€€€€€€€€€€€€€ end of compiler - specific  section €€€€€€€€€€€€€}
+
+Procedure linearMove(var A,B; Size : Word);
+var
+  pA, pB : PByteArray;
+  I : Word;
+begin
+  if Size = 0 then Exit;
+  pA := @A; pB := @B;
+  for I := 0 to Size - 1 do
+    pB^[I] := pA^[I];
+end;
+
+Function BitSF(A : Longint) : Byte;
+var I : Byte;
+begin
+  if A = 0 then BitSF := 255
+  else
+  begin
+    I := 0;
+    while (A and 1) = 0 do
+    begin
+      Inc(I);
+      A := A shr 1;
+    end;
+    BitSF := I;
+  end;
+end;
+
+Function BitSR(A : Longint) : Byte;
+var I : Byte;
+    uA : LongWord;
+begin
+  uA := LongWord(A);
+  if uA = 0 then BitSR := 255
+  else
+  begin
+    I := 31;
+    while (uA and $80000000) = 0 do
+    begin
+      Dec(I);
+      uA := uA shl 1;
+    end;
+    BitSR := I;
+  end;
+end;
+
+Function MemCmp(var A,B; Size : Word) : Shortint;
+var
+  pA, pB : PByteArray;
+  I : Word;
+begin
+  if Size = 0 then begin MemCmp := 0; Exit; end;
+  pA := @A; pB := @B;
+  for I := 0 to Size - 1 do
+  begin
+    if pA^[I] < pB^[I] then begin MemCmp := -1; Exit; end
+    else if pA^[I] > pB^[I] then begin MemCmp := 1; Exit; end;
+  end;
+  MemCmp := 0;
+end;
+
+Function Search(var Buff; BuffLen : Word; var Target; TargetLen : Word) : Word;
+var
+  pB, pT : PByteArray;
+  I, J : Word;
+  match : Boolean;
+begin
+  if (TargetLen = 0) or (BuffLen < TargetLen) then
+  begin
+    Search := Word(-1);
+    Exit;
+  end;
+  pB := @Buff; pT := @Target;
+  for I := 0 to BuffLen - TargetLen do
+  begin
+    match := True;
+    for J := 0 to TargetLen - 1 do
+    begin
+      if pB^[I + J] <> pT^[J] then
+      begin
+        match := False;
+        break;
+      end;
+    end;
+    if match then
+    begin
+      Search := I;
+      Exit;
+    end;
+  end;
+  Search := Word(-1);
+end;
+
+Function MemScanFwd(var Buff; BuffLen : Word; Value : byte) : Word;
+var
+  pB : PByteArray;
+  I : Word;
+begin
+  pB := @Buff;
+  I := 0;
+  while (I < BuffLen) and (pB^[I] = Value) do
+    Inc(I);
+  MemScanFwd := I;
+end;
+
+Function MemScanBwd(var Buff; BuffLen : Word; Value : byte) : Word;
+var
+  pB : PByteArray;
+  I : Word;
+begin
+  if BuffLen = 0 then begin MemScanBwd := 0; Exit; end;
+  pB := @Buff;
+  I := 0;
+  while (I < BuffLen) and (pB^[BuffLen - 1 - I] = Value) do
+    Inc(I);
+  MemScanBwd := I;
+end;
+
+type
+  tProcInfo = function(Info: Pointer): Boolean;
+
+Function level2call(Proc,Info : Pointer) : boolean;
+begin
+  if Proc <> nil then
+    level2call := tProcInfo(Proc)(Info)
+  else
+    level2call := False;
+end;
 
 end.
-

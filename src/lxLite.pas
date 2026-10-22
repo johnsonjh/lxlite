@@ -1,14 +1,14 @@
-{&AlignCode-,AlignData-,AlignRec-,G3+,Speed-,Frame-,Use32+}
-{&M 262144}
-{&R lxlite.res}
-{&R os2api.res}
+{$mode delphi}{$packrecords 1}{$H-}
+{$I-}
+{$R lxlite.res}
+{$R os2api.res}
 uses
- Dos, Crt, 
+ Dos, Crt, SysUtils,
 {$IFDEF OS2}
  os2def, os2base, 
 {$ENDIF}
  exe386, os2exe, strOp, miscUtil,
- SysLib, Collect, Country, Strings, lxLite_Global, lxLite_Objects, vpsyslow;
+ SysLib, Collect, Country, Strings, lxLite_Global, lxLite_Objects;
 
 label
  done;
@@ -742,7 +742,7 @@ end;
 
 Procedure ProcessFiles(const fN : string; Level : Longint);
 var
- sr : SearchRec;
+ sr : Dos.SearchRec;
  nf : Longint;
  dl : boolean;
  _d : DirStr;
@@ -750,7 +750,7 @@ var
 begin
  _d := extractDir(fN);
  _n := extractName(fN);
- FindFirst(fN, Archive or Hidden or SysFile, sr);
+ Dos.FindFirst(fN, Archive or Hidden or SysFile, sr);
  nf := 0; dl := FALSE;
  if (Dos.DosError <> 0) and (Level = 0) and (not opt.RecurSearch)
   then begin
@@ -781,24 +781,24 @@ begin
                  ProcessFile(_d + sr.Name);
                 end;
          end;
-   FindNext(sr);
+   Dos.FindNext(sr);
   end;
- FindClose(sr);
+ Dos.FindClose(sr);
  if allDone or not opt.RecurSearch then Exit;
  if nf = 0
   then begin
         SetColor($0B); Write('À ', Short(_d, 77));
         ClearToEOL; Write(#13);
        end;
- FindFirst(_d + '*', Archive or Hidden or SysFile or Directory, sr);
+ Dos.FindFirst(_d + '*', Archive or Hidden or SysFile or Directory, sr);
  While (Dos.DosError = 0) and (not allDone) do
   begin
    if (sr.Attr and Directory <> 0) and (sr.Name[1] <> '.') and
       (length(_d) + length(sr.Name) + length(_n) + 1 <= 255)
-    then ProcessFiles(_d + sr.Name + '\' + _n, succ(Level));
-   FindNext(sr);
+    then ProcessFiles(_d + sr.Name + PathDelim + _n, succ(Level));
+   Dos.FindNext(sr);
   end;
- FindClose(sr);
+ Dos.FindClose(sr);
 end;
 
 procedure InitLogFile;

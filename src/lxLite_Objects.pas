@@ -1,10 +1,8 @@
-{&AlignCode-,AlignData-,AlignRec-,G3+,Speed-,Frame-,Use32+}
-{$P+}
+{$mode delphi}{$packrecords 1}{$H-}
 Unit lxLite_Objects;
 
 Interface uses exe286, exe386, os2exe, miscUtil, sysLib,
-               strOp, Country, Collect, lxlite_Global, vpsyslow,
-               os2base;
+               strOp, Country, Collect, lxlite_Global;
 type
  pMyCmdLineParser = ^tMyCmdLineParser;
  tMyCmdLineParser = object(tCommandLineParser)
@@ -46,7 +44,7 @@ var
  procedure setConfig(const ID : string);
  procedure ShowConfig;
 
-Implementation uses Crt, Dos, Strings;
+Implementation uses Crt, Dos, Strings, Drivers;
 
 var
  CmdLineStack : pStringCollection;
@@ -65,23 +63,29 @@ begin
 end;
 
 procedure WriteError(const msg: string);
-const
- NewLineStr: array[0..1] of Char = #$0D + #$0A;
-var
- msgNL : string;
 begin
- msgNL := msg + NewLineStr;
- DosPutMessage(SysFileStdErr, Length(msgNL), @msgNL[1]);
+ Writeln(StdErr, msg);
 end;
 
-function FormatStr;
+function FormatStr(Template : Longint; Params : array of const) : string;
 var
- nP : array[0..31] of Longint;
- I  : Word;
+ nP : array[0..31] of PtrUInt;
+ I  : Integer;
+ S  : string;
 begin
- For I := low(Params) to High(Params) do
-  nP[I - low(Params)] := pLong(@Params[I])^;
- StrOp.FormatStr(Result, GetResourceString(Template), nP);
+ for I := Low(Params) to High(Params) do
+ case Params[I].VType of
+   vtInteger: nP[I - Low(Params)] := PtrUInt(Params[I].VInteger);
+   vtInt64: nP[I - Low(Params)] := PtrUInt(Params[I].VInt64^);
+   vtPointer: nP[I - Low(Params)] := PtrUInt(Params[I].VPointer);
+   vtPChar: nP[I - Low(Params)] := PtrUInt(Params[I].VPChar);
+   vtString: nP[I - Low(Params)] := PtrUInt(Params[I].VString);
+   vtAnsiString: nP[I - Low(Params)] := PtrUInt(Params[I].VAnsiString);
+   vtChar: nP[I - Low(Params)] := PtrUInt(Ord(Params[I].VChar));
+   else nP[I - Low(Params)] := PtrUInt(Params[I].VPointer);
+ end;
+ S := GetResourceString(Template);
+ Drivers.FormatStr(Result, S, nP);
 end;
 
 procedure PrintHeader;
@@ -769,13 +773,14 @@ var FF   :File;
     svmode:Longint;
 begin
   svmode  :=FileMode;
-  FileMode:=open_access_ReadOnly;
+  FileMode:=0;
   assign(FF,FileName);
   reset(FF,1);
   if ioresult<>0 then Stop(msgCantReadBin, FileName);
   FileMode:=svmode;
 
   psize:=FileSize(FF);
+  pdata:=nil;
   if psize<>0 then
   begin
     GetMem(pdata,psize);
@@ -802,9 +807,12 @@ begin
           if pl>=Header.lxPageSize then PageSize:=Header.lxPageSize else
             PageSize:=pl;
           dec(pl,PageSize);
-          GetMem(Pages^[StartP-1],PageSize);
-          Move(pd^,Pages^[StartP-1]^,PageSize);
-          inc(pd,PageSize);
+          if PageSize>0 then
+          begin
+            GetMem(Pages^[StartP-1],PageSize);
+            Move(pd^,Pages^[StartP-1]^,PageSize);
+            inc(pd,PageSize);
+          end else Pages^[StartP-1]:=nil;
 
           if PageFlags <= pgIterData2 then rs:=GetResourceString(msgPageFlags+PageFlags) else
           if PageFlags = pgIterData3 then rs:=GetResourceString(msgPageM3) else
@@ -1109,7 +1117,7 @@ begin
           else parmHandler := I;
          if opt.backupDir <> ''
           then if not (opt.backupDir[length(opt.backupDir)] in ['/','\'])
-                then opt.backupDir := opt.backupDir + '\';
+                then opt.backupDir := opt.backupDir + nativeDirDelim;
         end;
   'C' : case UpCase(parmStr[2]) of
          ':' : begin
@@ -1162,7 +1170,7 @@ begin
           then begin
             logPath := GetEnv('LOGFILES');
             if logPath = '' then logPath := sourcePath;
-            if not (logPath[length(logPath)] in ['/', '\']) then logPath := logPath + '\';
+            if not (logPath[length(logPath)] in ['/', '\']) then logPath := logPath + nativeDirDelim;
             opt.logFileName := logPath + logFname;
           end;
         end;

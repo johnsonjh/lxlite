@@ -1,6 +1,4 @@
-{$A-,B-,D+,E-,F-,G-,I-,L+,N-,O-,P+,Q-,R-,S-,T-,V-,X+,Y+}
-{&AlignCode-,AlignData-,AlignRec-,Asm-,Cdecl-,Delphi+,W-,Frame-,G3+}
-{&LocInfo+,Optimise+,OrgName-,SmartLink+,Speed-,Z-,ZD-,Use32+}
+{$mode delphi}{$H-}{$I-}
 Unit SysLib;
 
 Interface uses Dos, miscUtil, Collect
@@ -17,6 +15,11 @@ function DosEditName(MetaLevel: LongInt; Source,Edit: PChar; Target: PChar; cbTa
 const
  fMaskDelim1 = ':'; {fileMask delimiter char}
  fMaskDelim2 = '/'; {fileMask delimiter char}
+{$IFDEF UNIX}
+ nativeDirDelim = '/';
+{$ELSE}
+ nativeDirDelim = '\';
+{$ENDIF}
 
 type
  pFileMatch = ^tFileMatch;
@@ -103,8 +106,8 @@ type
 { Return an string from resourse (from string table) }
  Function  GetResourceString(ID : Longint) : string;
 
-Implementation uses strOp, Streams, strings
-{$ifdef OS2}, os2base {$endif}, vpsyslow;
+Implementation uses strOp, Streams, strings, Classes, SysUtils;
+
 
 constructor tFileMatch.Create;
 begin
@@ -509,37 +512,37 @@ begin
 end;
 {$else}
 var
- IS,OS : pFileStream;
+ SrcS,DstS : pFileStream;
  At    : Word;
  FT    : Longint;
 begin
  fileCopy := FALSE;
- New(IS, Create(sName, stmReadOnly));
- if (IS = nil) or (IS^.Error <> steOK)
+ New(SrcS, Create(sName, stmReadOnly));
+ if (SrcS = nil) or (SrcS^.Error <> steOK)
   then begin
-        if IS <> nil then Dispose(IS, Destroy);
+        if SrcS <> nil then Dispose(SrcS, Destroy);
         exit;
        end;
- New(OS, Create(dName, stmWriteOnly));
- FT := IS^.GetTime; At := IS^.GetAttr;
- if (OS = nil) or (OS^.Error <> steOK)
+ New(DstS, Create(dName, stmWriteOnly));
+ FT := SrcS^.GetTime; At := SrcS^.GetAttr;
+ if (DstS = nil) or (DstS^.Error <> steOK)
   then begin
-        Dispose(IS, Destroy);
-        if OS <> nil then Dispose(OS, Destroy);
+        Dispose(SrcS, Destroy);
+        if DstS <> nil then Dispose(DstS, Destroy);
         exit;
        end;
- if IS^.Size <> OS^.CopyFrom(IS^, -1)
+ if SrcS^.Size <> DstS^.CopyFrom(SrcS^, -1)
   then begin
-        Dispose(OS, Erase);
+        Dispose(DstS, Erase);
         fileCopy := FALSE;
        end
   else begin
-        OS^.SetAttr(At);
-        OS^.SetTime(FT);
-        Dispose(OS, Destroy);
+        DstS^.SetAttr(At);
+        DstS^.SetTime(FT);
+        Dispose(DstS, Destroy);
         fileCopy := TRUE;
        end;
- Dispose(IS, Destroy);
+ Dispose(SrcS, Destroy);
 end;
 {$endIf}
 
@@ -579,7 +582,8 @@ begin
  N := Copy(fName, succ(length(D)), 255);
  if D = '' then D := GetEnv('TEMP');
  if D = '' then D := GetEnv('TMP');
- if not (D[length(D)] in ['/', '\']) then D := D + '\';
+ if (D <> '') and not (D[length(D)] in ['/', '\']) then
+  D := D + nativeDirDelim;
  Count := 1000;
  repeat
   R := D + N; Dec(Count);
@@ -602,87 +606,21 @@ begin
   else tempFileName := R;
 end;
 
-{$ifdef WIN32}
 Function SourcePath : string;
-var len   :integer;
-    ename :ShortString;
+var len   : integer;
+    ename : string;
 begin
-  SysCmdlnParam(0,ename);
-  len:=length(ename);
-  while len>0 do
+  ename := ParamStr(0);
+  len := length(ename);
+  while len > 0 do
     if ename[len] in ['\','/'] then
     begin
-      ename[0]:=char(len);
-      break
+      SetLength(ename, len);
+      break;
     end else 
       dec(len);
-
   SourcePath := ename;
 end;
-{$else}
-Function SourcePath; assembler {&uses esi,edi};
-{$ifDef OS2}
-asm             mov     edi,Environment
-                mov     al,0
-                mov     ecx,-1
-@@cont:         repne   scasb
-                scasb
-                jnz     @@cont
-                mov     esi,edi
-                repne   scasb
-@@searchSlash:  cmp     byte ptr [edi-1],':'
-                je      @@done
-                dec     edi
-                cmp     edi,esi
-                jbe     @@done
-                cmp     byte ptr [edi],'/'
-                je      @@done
-                cmp     byte ptr [edi],'\'
-                jne     @@searchSlash
-@@done:         sub     edi,esi
-                mov     eax,edi
-                inc     eax
-                mov     ecx,eax
-                mov     edi,@result
-                stosb
-                rep     movsb
-end;
-{$else}
-asm             push    ds
-                mov     es,PrefixSeg
-                mov     ds,es:[02Ch]
-                push    ds
-                pop     es
-                mov     al,0
-                mov     cx,-1
-                xor     di,di
-@@cont:         repne   scasb
-                scasb
-                jnz     @@cont
-                scasw
-                mov     si,di
-                repne   scasb
-@@searchSlash:  cmp     byte ptr [di-1],':'
-                je      @@done
-                dec     di
-                cmp     di,si
-                jbe     @@done
-                cmp     byte ptr [di],'/'
-                je      @@done
-                cmp     byte ptr [di],'\'
-                jne     @@searchSlash
-@@done:         sub     di,si
-                mov     ax,di
-                inc     ax
-                mov     cx,ax
-                les     di,@result
-                stosb
-                rep     movsb
-                pop     ds
-end;
-{$endif}
-{$endif}
-
 procedure fSplit;
 var
  I,J : Integer;
@@ -850,33 +788,46 @@ end;
 {$endIf}
 
 function GetResourceString(ID : Longint) : string;
-{$IFDEF OS2}
 var
- pS : pByte;
- I  : Integer;
- S  : string;
+  RS: TResourceStream;
+  bundleID: Integer;
+  strIndex: Integer;
+  i, j: Integer;
+  len: Word16;
+  wCh: WideChar;
+  resStr: string;
 begin
- if DosGetResource(nullHandle, rt_String, ID div 16 + 1, Pointer(pS)) <> 0
-  then begin
-        GetResourceString := '';
-        exit;
-       end;
- Inc(pS, sizeOf(Word16)); {skip codepage}
- For I := 1 to ID and $0F do Inc(pS, succ(pS^));
- Move(pS^, S, pS^);
- Dec(byte(S[0]));
- DosFreeResource(pS);
- GetResourceString := S;
-{$ELSE}
-var
- buf: array [0..511] of char;
-begin
- SysLoadResourceString(ID, buf, sizeof(buf));
- GetResourceString := StrPas(buf);
-{$ENDIF}
+  GetResourceString := '';
+  bundleID := (ID div 16) + 1;
+  strIndex := ID and $0F;
+  try
+    RS := TResourceStream.CreateFromID(HInstance, bundleID, PChar(RT_STRING));
+  except
+    Exit;
+  end;
+  try
+    for i := 0 to strIndex do
+    begin
+      if RS.Position >= RS.Size then Exit;
+      RS.Read(len, SizeOf(Word16));
+      if i = strIndex then
+      begin
+        SetLength(resStr, len);
+        for j := 1 to len do
+        begin
+          RS.Read(wCh, SizeOf(WideChar));
+          resStr[j] := Char(Ord(wCh));
+        end;
+        GetResourceString := resStr;
+        Exit;
+      end
+      else
+        RS.Seek(len * SizeOf(WideChar), soFromCurrent);
+    end;
+  finally
+    RS.Free;
+  end;
 end;
-
-
 procedure tCommandLineParser.Parse;
 begin
  PreProcess(S);
@@ -898,34 +849,28 @@ end;
 procedure tCommandLineParser.ParseCommandLine;
 var
  ParmStr : string;
- CPtr    : pchar;
+ I       : Integer;
+ P       : string;
 begin
-{$ifDef OS2}
- if CmdLine = nil
-  then ParmStr := ''
-  else ParmStr := StrPas(GetASCIIZptr(CmdLine^, 2));
-{$else}
-{$ifDef WIN32}
- CPtr := CmdLine;
- if CPtr<>nil then 
+ ParmStr := '';
+ for I := 1 to ParamCount do
  begin
-    if (CPtr^='"') then
-    begin
-       inc(CPtr);
-       CPtr:=StrScan(CPtr, '"');
-    end else
-       CPtr:=StrScan(CPtr, ' ');
-    
-    if CPtr<>nil then inc(CPtr);
+  P := ParamStr(I);
+{$IFDEF UNIX}
+  { Absolute POSIX filenames must not be mistaken for OS/2 /options.
+    Keep /option:argument (including /PWU:...:/path) working. }
+  if (P <> '') and (P[1] = '/') and
+     (FileExist(P) or ((Pos('/', Copy(P, 2, 255)) > 0) and
+                       (Pos(':', P) = 0)))
+   then P := '"' + P + '"'
+   else
+{$ENDIF}
+  if Pos(' ', P) > 0 then P := '"' + P + '"';
+  if ParmStr <> '' then ParmStr := ParmStr + ' ';
+  ParmStr := ParmStr + P;
  end;
- if CPtr=nil then ParmStr:='' else ParmStr:=StrPas(CPtr);
-{$else}
- Move(mem[PrefixSeg:$80], ParmStr, succ(mem[PrefixSeg:$80]));
-{$endIf}
-{$endIf}
  Parse(ParmStr);
 end;
-
 Function tCommandLineParser.GetWord;
 var
  I,J : Word;

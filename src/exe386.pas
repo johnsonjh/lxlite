@@ -1,13 +1,4 @@
-(****************************************************************************)
-(*  Title:       exe386.pas                                                 *)
-(*  Description: Data structure definitions for the OS/2                    *)
-(*               executable file format (flat model)                        *)
-(****************************************************************************)
-(*               Copyright (c) IBM Corporation 1987, 1992                   *)
-(*                Copyright (c) Microsoft Corp 1988, 1991                   *)
-(*            C->Pascal conversion (c) FRIENDS software, 1996               *)
-(****************************************************************************)
-{&AlignCode-,AlignData-,AlignRec-,G3+,Speed-,Frame-,Use32+}
+{$mode delphi}{$packrecords 1}
 Unit exe386;
 
 Interface uses miscUtil;

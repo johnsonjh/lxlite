@@ -1,0 +1,1 @@
+StrOp.pas

@@ -1,4 +1,4 @@
-{$AlignCode-,AlignData-,AlignRec-,G3+,Speed-,Frame-,Use32+}
+{$mode delphi}{$H-}
 unit Country;
 
 Interface uses 
@@ -59,7 +59,7 @@ end;
 function tCountry.DateStr;
 var S  : string[16];
     I  : Integer;
-    Year,Month,Day,DayOfWeek:Word;
+    Year,Month,Day,DayOfWeek:Word16;
 
 Procedure DateAdd(optMask, Val, Digits : Longint; Sep : Char);
 const
@@ -98,7 +98,7 @@ function tCountry.TimeStr;
 var I,V,W : Longint;
     S     : String[16];
     sep   : Char;
-    Hour,Minute,Second,Sec100:Word;
+    Hour,Minute,Second,Sec100:Word16;
 begin
  GetTime(Hour,Minute,Second,Sec100);
  S := '';

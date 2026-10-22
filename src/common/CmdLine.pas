@@ -1,33 +1,32 @@
+{$mode delphi}{$H-}
 Unit CmdLine;
 
 Interface
 
 type
-{ Parameter handling function definition }
  ParmHandleFn = Function(var Parm : string) : Byte;
 
-{Command line parsing helper. PH gets called on each /# and -# parameter;}
-{otherwise NH is called; they return number of chars starting from string}
-{start which have to be stripped (i.e. when they were already recognized)}
-{If ParmStr is #0 uses the real command line; otherwise ParmStr is used  }
  Procedure ParseCommandLine(const ParmStr : string; PH,NH : ParmHandleFn);
-{ParseCommandLine additional helper to parse filenames and other stuff which}
-{can contain spaces. To specify an parameter (i.e. an filename) containing  }
-{spaces use " double quote " symbol. Retrieves the length of parsed string; }
-{however if parameter contains quotes they are removed from DestStr         }
  Function  ParseName(var ParmStr : string; StartChar : Word; var DestStr : string) : Word;
 
 Implementation uses Strings, strOp;
 
-Procedure ParseCommandLine;
+Procedure ParseCommandLine(const ParmStr : string; PH,NH : ParmHandleFn);
 var S : String;
+    I : Integer;
+    P : String;
 begin
  if ParmStr = #0
-  then {$ifDef VIRTUALPASCAL}
-       S := StrPas(GetASCIIZptr(System.CmdLine^, 2))
-       {$else}
-       Move(mem[PrefixSeg:$80], S, succ(mem[PrefixSeg:$80]))
-       {$endIf}
+  then begin
+        S := '';
+        for I := 1 to ParamCount do
+        begin
+          P := ParamStr(I);
+          if Pos(' ', P) > 0 then P := '"' + P + '"';
+          if S <> '' then S := S + ' ';
+          S := S + P;
+        end;
+       end
   else S := ParmStr;
  While S <> '' do
   begin
@@ -46,12 +45,12 @@ begin
   end;
 end;
 
-Function ParseName;
+Function ParseName(var ParmStr : string; StartChar : Word; var DestStr : string) : Word;
 var I,J : Word;
     fCh : Char;
 begin
  I := StartChar;
- While (I < length(ParmStr)) and (ParmStr[I] in [#9, ' ']) do Inc(I);
+ While (I <= length(ParmStr)) and (ParmStr[I] in [#9, ' ']) do Inc(I);
  if I <= length(ParmStr)
   then begin
         J := I;

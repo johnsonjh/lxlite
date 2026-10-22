@@ -1,0 +1,1 @@
+lxLite_Global.pas

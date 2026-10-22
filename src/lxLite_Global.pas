@@ -1,4 +1,4 @@
-{&AlignCode-,AlignData-,AlignRec-,G3+,Speed-,Frame-,Use32+}
+{$mode delphi}{$packrecords 1}{$H-}
 Unit lxLite_Global;
 
 Interface uses exe286, exe386, os2exe, Collect, SysLib, Country;
@@ -269,7 +269,16 @@ const
  vfFixups         = $00010000;
  vfExtra          = $00100000;
  vfDebug          = $00200000;
- vfAnything       = $FFFFFFFF;
+ vfAnything        = -1;
+
+ const
+  open_access_ReadOnly     = $00;
+  open_access_WriteOnly    = $01;
+  open_access_ReadWrite    = $02;
+  open_share_DenyReadWrite = $10;
+  open_share_DenyWrite     = $20;
+  open_share_DenyRead      = $30;
+  open_share_DenyNone      = $40;
 
  cfgFname         = 'lxLite.cfg';
  logFname         = 'lxLite.log';
@@ -384,6 +393,12 @@ type
  end;
 
 var
+ RedirOutput : boolean = False;
+ RedirInput  : boolean = False;
+ StdIn       : Text;
+ StdOut      : Text;
+
+var
  fNames,
  loadCFG   : pStringCollection;
  exclude   : pFileMatch;
@@ -393,7 +408,7 @@ var
 procedure SetColor(Color : Byte);
 procedure ClearToEOL;
 
-Implementation uses Crt, StrOp;
+Implementation uses Crt, StrOp{$IFDEF UNIX}, termio{$ENDIF};
 
 procedure SetColor;
 const
@@ -429,4 +444,14 @@ begin
  Dispose(pModuleDef(Item));
 end;
 
+
+initialization
+{$IFDEF UNIX}
+  RedirInput := (isatty(0) = 0);
+  RedirOutput := (isatty(1) = 0);
+{$ENDIF}
+  Assign(StdIn, '');
+  Reset(StdIn);
+  Assign(StdOut, '');
+  Rewrite(StdOut);
 end.

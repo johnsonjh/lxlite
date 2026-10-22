@@ -3,5 +3,6 @@
 *.res
 *.exe
 /src/out/
+/build/
 /lxLite
 *.zip

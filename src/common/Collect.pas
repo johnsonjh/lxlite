@@ -1,12 +1,4 @@
-{$A-,B-,D+,E-,F-,G-,I-,L+,N-,O-,P-,Q-,R-,S-,T-,V-,X+,Y+,Use32+}
-{様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様}
-{ Collections (dynamic arrays) ver. 1.1                                      }
-{ Portable source code (tested on DOS and OS/2)                              }
-{ Original copyright (c) Borland International :-)                           }
-{ Version history:                                                           }
-{ 1.0 Major modifications by Andrew Zabolotny, FRIENDS software              }
-{ 1.1 Function tFakeStream.Get bugfixed by Max Alekseyev                     }
-{様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様様}
+{$mode delphi}{$H-}
 Unit Collect;
 
 Interface uses miscUtil, Strings, Streams;
