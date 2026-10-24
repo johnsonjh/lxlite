@@ -45,7 +45,8 @@ var
  procedure setConfig(const ID : string);
  procedure ShowConfig;
 
-Implementation uses Crt, Dos, Strings, Drivers;
+Implementation uses Crt, Dos, Strings, Drivers
+{$IFDEF MSWINDOWS}, Windows{$ENDIF};
 
 var
  CmdLineStack : pStringCollection;
@@ -104,7 +105,7 @@ const
 begin
  if Already then Exit;
  Already := TRUE;
- Write(FormatStr(msgProgHeader1, [Version])); NL;
+ Write(FormatStr(msgProgHeader1, [lxLite_Global.Version])); NL;
  Write(OutputResource(msgProgHeader2)); NL;
  Write(OutputResource(msgProgHeader3)); NL;
  Write(OutputResource(msgProgHeader4)); NL;
@@ -112,6 +113,61 @@ begin
  Write(OutputResource(msgProgHeaderX)); NL;
  Write(OutputResource(msgProgHeader6)); NL;
 end;
+
+{$IFDEF MSWINDOWS}
+{ The Windows CRT ReadKey implementation reads from TextRec(Input).Handle,
+  which is vulnerable to changes in the application's text stream setup.
+  Only the help pager uses this direct console-event path; the traditional
+  keyboard handling on OS/2 and Unix is unchanged. }
+function PagerHasConsoleInput: Boolean;
+var
+  H : THandle;
+  Mode : DWORD;
+begin
+  H := GetStdHandle(STD_INPUT_HANDLE);
+  PagerHasConsoleInput := FALSE;
+  if (H = 0) or (H = INVALID_HANDLE_VALUE) then Exit;
+  if not GetConsoleMode(H, Mode) then Exit;
+  { Never stop for a key when the help text itself is being redirected. }
+  H := GetStdHandle(STD_OUTPUT_HANDLE);
+  if (H = 0) or (H = INVALID_HANDLE_VALUE) then Exit;
+  PagerHasConsoleInput := GetConsoleMode(H, Mode);
+end;
+
+function PagerReadKey: Char;
+var
+  H : THandle;
+  E : TInputRecord;
+  N : DWORD;
+begin
+  { If the console disappears while paging, advance instead of hanging. }
+  PagerReadKey := ' ';
+  H := GetStdHandle(STD_INPUT_HANDLE);
+  if (H = 0) or (H = INVALID_HANDLE_VALUE) then Exit;
+  repeat
+    if not ReadConsoleInputW(H, E, 1, N) then Exit;
+    if N = 0 then Continue;
+    if E.EventType <> KEY_EVENT then Continue;
+    if not E.Event.KeyEvent.bKeyDown then Continue;
+    case E.Event.KeyEvent.wVirtualKeyCode of
+      VK_SPACE  : begin PagerReadKey := ' '; Exit; end;
+      VK_RETURN : begin PagerReadKey := #13; Exit; end;
+      VK_ESCAPE : begin PagerReadKey := #27; Exit; end;
+      Ord('Q')  : begin PagerReadKey := 'Q'; Exit; end;
+    end;
+  until FALSE;
+end;
+{$ELSE}
+function PagerHasConsoleInput: Boolean;
+begin
+  PagerHasConsoleInput := TRUE;
+end;
+
+function PagerReadKey: Char;
+begin
+  PagerReadKey := ReadKey;
+end;
+{$ENDIF}
 
 procedure NL;
 const
@@ -126,14 +182,15 @@ begin
  if Rows = -1 then Rows := hi(WindMax);
  Dec(Rows);
  if Rows = 0
-  then if not (RedirOutput or RedirInput)
+  then if not (RedirOutput or RedirInput) and PagerHasConsoleInput
         then begin
               S := OutputResource(msgMore);
               SetColor($30); I := (80 - OutputWidth(S)) div 2;
               Write(Strg(' ', I), S); ClearToEOL;
+              Flush(Output);
               repeat
                I := 0;
-               case upCase(Readkey) of
+               case upCase(PagerReadKey) of
                 ' ' : Rows := hi(WindMax);
                 #13 : Rows := 1;
                 'Q',
@@ -199,6 +256,7 @@ begin
              if I = 532 then begin
                SetColor($0B);
                Write(OutputResource(617)); NL;
+               SetColor($09);
                Write(OutputResource(618)); NL;
                Write(OutputResource(619)); NL;
              end;

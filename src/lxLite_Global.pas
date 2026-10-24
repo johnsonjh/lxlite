@@ -367,7 +367,7 @@ const
   DiscardXOpts : FALSE;
   ColoredOutput: TRUE;
   UnicodeOutput: {$IFDEF UNIX}TRUE{$ELSE}FALSE{$ENDIF};
-  UseStdOut    : FALSE;
+  UseStdOut    : {$IFDEF MSWINDOWS}TRUE{$ELSE}FALSE{$ENDIF};
   AllowZTrunc  : TRUE;
   tresholdStub : 0;
   tresholdXtra : 1024;
@@ -420,7 +420,8 @@ function OutputChar(C : Char) : string;
 function OutputResource(ID : Longint) : string;
 function OutputWidth(const S : string) : Integer;
 
-Implementation uses Crt, StrOp{$IFDEF UNIX}, termio{$ENDIF};
+Implementation uses Crt, StrOp{$IFDEF UNIX}, termio{$ENDIF}
+                         {$IFDEF MSWINDOWS}, Windows{$ENDIF};
 
 {$IFDEF UNIX}
 var
@@ -451,9 +452,60 @@ begin
     UnicodeTTYActive := Opt.UnicodeOutput;
 end;
 {$ELSE}
+{$IFDEF MSWINDOWS}
+const
+  WinCP437 = 437;
+  WinCPUTF8 = 65001;
+
+var
+  WinConsoleOutput : THandle = 0;
+  WinConsoleOutputActive : Boolean = FALSE;
+  WinSavedOutputCP : UINT = 0;
+  WinOutputCPChanged : Boolean = FALSE;
+
+procedure RestoreWinOutputCP;
+begin
+  if WinOutputCPChanged and (WinSavedOutputCP <> 0) then
+    SetConsoleOutputCP(WinSavedOutputCP);
+  WinOutputCPChanged := FALSE;
+end;
+
+{ Streaming stdout scrolls normally in ConPTY-based terminals.  Use the
+  console's selected code page to interpret that stream, but never change
+  the code page for redirected stdout.  /CS- restores the original one. }
+procedure ConfigureOutputTTY;
+var
+  H : THandle;
+  Mode : DWORD;
+  DesiredCP, CurrentCP : UINT;
+begin
+  WinConsoleOutputActive := FALSE;
+  if not (Opt.UseStdOut or Opt.UnicodeOutput) then begin
+    RestoreWinOutputCP;
+    Exit;
+  end;
+  H := GetStdHandle(STD_OUTPUT_HANDLE);
+  if (H = 0) or (H = INVALID_HANDLE_VALUE) or
+     (not GetConsoleMode(H, Mode)) then begin
+    RestoreWinOutputCP;
+    Exit;
+  end;
+
+  WinConsoleOutput := H;
+  WinConsoleOutputActive := TRUE;
+  CurrentCP := GetConsoleOutputCP;
+  if not WinOutputCPChanged then WinSavedOutputCP := CurrentCP;
+  if Opt.UnicodeOutput then DesiredCP := WinCPUTF8
+                       else DesiredCP := WinCP437;
+  if (CurrentCP <> 0) and (CurrentCP <> DesiredCP) and
+     SetConsoleOutputCP(DesiredCP) then
+    WinOutputCPChanged := TRUE;
+end;
+{$ELSE}
 procedure ConfigureOutputTTY;
 begin
 end;
+{$ENDIF}
 {$ENDIF}
 
 { Convert only text known to be CP437.  Filenames received from Unix must
@@ -559,6 +611,13 @@ begin
    Write(Output, #27'[', FG, ';', BG, 'm');
  end;
 {$ENDIF}
+{$IFDEF MSWINDOWS}
+ { The stdout writer bypasses the CRT color renderer as well.  Applying
+   console attributes here preserves colors for both /GT and /GU without
+   emitting escape sequences into redirected files or pipes. }
+ if WinConsoleOutputActive then
+   SetConsoleTextAttribute(WinConsoleOutput, textAttr);
+{$ENDIF}
 end;
 
 procedure ClearToEOL;
@@ -595,4 +654,8 @@ initialization
   Reset(StdIn);
   Assign(StdOut, '');
   Rewrite(StdOut);
+{$IFDEF MSWINDOWS}
+finalization
+  RestoreWinOutputCP;
+{$ENDIF}
 end.
