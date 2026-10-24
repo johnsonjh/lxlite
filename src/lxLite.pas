@@ -170,7 +170,9 @@ var
  S   : string;
  val : Longint;
 begin
+ showProgress := TRUE;
  if RedirOutput then exit;
+ if Max <= 0 then exit;
  S := Strg('±', 20);
  val := Current * 20 div Max;
  if val <> prevProgressValue
@@ -419,7 +421,7 @@ begin
 
  if not opt.DiscardXOpts then CheckExtraOptions;
  TrackProcess;
- askD := 0; askX := 0; askB := 0; askU := 0;
+ askD := 0; askX := 0; askN := 0; askB := 0; askU := 0;
  dbgOut := ''; xtrOut := ''; stbOut := '';
  bkf := $8000;
  if opt.doUnpack
@@ -585,6 +587,13 @@ begin
         prevProgressValue := -1;
         LX^.Pack(opt.PackMode, showProgress, opt.AllowZTrunc);
        end;
+ if LX^.FixupError then
+  begin
+   ExitCode := lxeBadFixupTable;
+   CheckError(lxeBadFixupTable);
+   LogError(msgLXerror + lxeBadFixupTable);
+   Goto locEx;
+  end;
  Write(#13); ClearToEOL;
  if (opt.FinalWrite = 0) then Goto locEx;
  if (opt.FinalWrite and fwfWrite <> 0)

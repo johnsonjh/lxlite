@@ -423,6 +423,7 @@ var
  pS  : pString;
 begin
  j := 0;
+ pS := nil;
  For i := 1 to ImpProcTbl^.Count do
   begin
    pS := ImpProcTbl^.At(pred(i));
@@ -1000,6 +1001,7 @@ begin
   svfFOalnNone   : I := msgAlignFONone;
   svfFOalnShift  : I := msgAlignFOShift;
   svfFOalnSector : I := msgAlignFOSect;
+  else I := msgUnknownType;
  end;
  S := OutputResource(I);
  Write(FormatStr(msgAlignFO, [S])); NL;
@@ -1007,6 +1009,7 @@ begin
  case opt.SaveMode and svfAlignEachObj of
   svfEOalnShift  : I := msgAlignObjShift;
   svfEOalnSector : I := msgAlignObjSect;
+  else I := msgUnknownType;
  end;
  S := OutputResource(I);
  Write(FormatStr(msgAlignObj, [S])); NL;
@@ -1023,6 +1026,7 @@ begin
                pkfRunLengthMin : I := msgRLmin;
                pkfRunLengthMid : I := msgRLmed;
                pkfRunLengthMax : I := msgRLmax;
+               else I := msgUnknownType;
               end;
         if opt.PackMode and pkfFixups = 0
          then J := msgFXoff
@@ -1030,6 +1034,7 @@ begin
                pkfFixupsVer2 : J := msgFXv2;
                pkfFixupsVer4 : J := msgFXv4;
                pkfFixupsMax  : J := msgFXmax;
+               else J := msgUnknownType;
               end;
         Write(FormatStr(msgRunLength, [OutputResource(I)])); NL;
         Write(FormatStr(msgLempelZiv, [ONOFF[opt.PackMode and pkfLempelZiv <> 0]])); NL;
@@ -1086,6 +1091,7 @@ begin
  if ii<>0 then
  begin
    val(copy(st,1,ii-1),StartVal,jj);
+   if jj<>0 then Stop(2, ParmStr);
    if st[ii]='-' then
    begin
      jj:=ii;
@@ -1095,6 +1101,7 @@ begin
      begin
        ColonGetRange:=jj+ii;
        val(copy(st,1,ii-1),EndVal,jj);
+       if jj<>0 then Stop(2, ParmStr);
      end;
    end else ColonGetRange:=ii;
  end;
@@ -1311,8 +1318,9 @@ begin
                                     begin
                                        opt.ApplyFixups := TRUE;
                                        ParmHandler := 1 + ColonGetWord(2, S);
+                                       I := 0; J := 1;
                                        if S <> '' then val(S,I,J);
-                                       if (S = '') or (I<=0) or (I>7) then Stop(2, parmStr)
+                                       if (S = '') or (J<>0) or (I<=0) or (I>7) then Stop(2, parmStr)
                                           else opt.ApplyMask := I;
                                     end else
                                        opt.ApplyFixups := isEnabled;
@@ -1323,8 +1331,9 @@ begin
                                     begin
                                        opt.ForceApply := TRUE;
                                        ParmHandler := 1 + ColonGetWord(2, S);
+                                       I := 0; J := 1;
                                        if S <> '' then val(S,I,J);
-                                       if (S = '') or (I<=0) or (I>7) then Stop(2, parmStr)
+                                       if (S = '') or (J<>0) or (I<=0) or (I>7) then Stop(2, parmStr)
                                           else opt.ApplyMask := I;
                                     end else
                                        opt.ForceApply  := isEnabled;

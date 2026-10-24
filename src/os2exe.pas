@@ -113,6 +113,7 @@ type
   PerPageCRC  : pLongArray;
   FixRecSize  : pLongArray;
   FixRecTbl   : pPointerArray;
+  FixupError  : boolean;
   ImpModTbl   : pStringCollection;
   ImpProcTbl  : pStringCollection;
   Pages       : pPointerArray;
@@ -710,6 +711,7 @@ begin
      pgIterData3 : L1 := Header.lxIterMapOfs + PageDataOffset shl Header.lxPageShift;
      pgInvalid,
      pgZeroed    : L1 := $7FFFFFFF;
+     else L1 := $7FFFFFFF;
     end;
    with ObjMap^[PageOrder^[N2]] do
     case PageFlags of
@@ -719,6 +721,7 @@ begin
      pgIterData3 : L2 := Header.lxIterMapOfs + PageDataOffset shl Header.lxPageShift;
      pgInvalid,
      pgZeroed    : L2 := $7FFFFFFF;
+     else L2 := $7FFFFFFF;
     end;
    if (L1 >= L2) or ((L1 = L2) and (N1 >= N2)) then exit;
   end;
@@ -950,7 +953,11 @@ begin
        end
   else Header.lxPageSumOfs := 0;
 
- if (Header.lxFPageTabOfs <> 0) and (StubSize + Header.lxFPageTabOfs < fSz)
+ { Do not read a partial fixup-page table or trust its uninitialized tail. }
+ if (Header.lxFPageTabOfs > 0) and
+    (Header.lxMpages >= 0) and
+    (Header.lxFPageTabOfs < fSz - StubSize) and
+    (Header.lxMpages < (fSz - StubSize - Header.lxFPageTabOfs) div SizeOf(Longint))
   then begin
         Seek(F, StubSize + Header.lxFPageTabOfs);
         GetMem(FixRecSize, succ(Header.lxMpages) * sizeOf(Longint));
@@ -963,6 +970,14 @@ begin
         Goto locEx;
        end;
 
+ if FixRecSize^[0] < 0 then
+  begin
+   FreeMem(FixRecSize, succ(Header.lxMpages) * SizeOf(Longint));
+   FixRecSize := nil;
+   Res := lxeBadFixupTable;
+   Goto locEx;
+  end;
+
  For I := 1 to Header.lxMPages do
   if FixRecSize^[I] < FixRecSize^[pred(I)]
    then if FixRecSize^[I] = 0
@@ -974,7 +989,9 @@ begin
                Goto locEx;
               end;
 
- if (Header.lxFRecTabOfs <> 0) and (StubSize + Header.lxFRecTabOfs < fSz)
+ if (Header.lxFRecTabOfs > 0) and
+    (Header.lxFRecTabOfs < fSz - StubSize) and
+    (FixRecSize^[Header.lxMPages] <= fSz - StubSize - Header.lxFRecTabOfs)
   then begin
         Seek(F, StubSize + Header.lxFRecTabOfs + FixRecSize^[0]);
 
@@ -1342,6 +1359,8 @@ end;
 begin
  freeModule;
  Res := lxeReadError;
+ Buff := nil;
+ neSeg := nil;
  Assign(F, fName);
 {$IFDEF OS2}
  New(EA, Fetch(fName));
@@ -1750,6 +1769,7 @@ var
  ZeroL : Longint;
  pS    : pString;
 begin
+ if FixupError then begin Save := lxeBadFixupTable; exit; end;
 { The following fields in Header must be set up before Save: }
 { lxMpages      lxStartObj   lxEIP         lxStackObj
   lxESP         lxPageSize   lxPageShift   lxObjCnt
@@ -2404,11 +2424,50 @@ var
  Fix    : pLXreloc;
  ST,SF  : Byte;
  baseSet: boolean;
- foundDup : boolean;
  Src,Base,
- I,fixCount,
- Next   : longint;
- Page   : pByteArray;
+ Next,recLen,chainCount : longint;
+ Page,Seen : pByteArray;
+
+{ Check the complete encoded record before any of the Get* helpers read it. }
+function RecordLength : Longint;
+var
+ N,Count : Longint;
+ T,F : Byte;
+begin
+ RecordLength := 0;
+ if (FixTbl = nil) or (FixSz < 2) then exit;
+ T := FixTbl^[0]; F := FixTbl^[1];
+ if ((T and $C0) <> 0) or
+    (not (T and nrSType in [nrSByte,nrSSeg,nrSPtr,nrSOff,
+                              nrPtr48,nrOff32,nrSoff32])) then exit;
+ if (F and nrNewChain <> 0) and
+    (((F and nrRType) <> nrRInt) or ((T and nrChain) <> 0)) then exit;
+ N := 2;
+ if T and nrChain <> 0
+  then begin
+        if FixSz < 3 then exit;
+        Count := FixTbl^[2];
+        Inc(N);
+       end
+  else begin
+        Count := 0;
+        Inc(N, 2);
+       end;
+ if F and nr16objMod <> 0 then Inc(N, 2) else Inc(N);
+ case F and nrRType of
+  nrRInt : if T and nrSType <> nrSSeg then
+            if F and nr32bitOff <> 0 then Inc(N, 4) else Inc(N, 2);
+  nrROrd : if F and nr8bitOrd <> 0 then Inc(N)
+            else if F and nr32bitOff <> 0 then Inc(N, 4)
+                 else Inc(N, 2);
+  nrRNam : if F and nr32bitOff <> 0 then Inc(N, 4) else Inc(N, 2);
+  nrRent : ;
+ end;
+ if F and nrAdd <> 0 then
+  if F and nr32bitAdd <> 0 then Inc(N, 4) else Inc(N, 2);
+ Inc(N, Count * SizeOf(Word16));
+ if N <= FixSz then RecordLength := N;
+end;
 
 function Get8 : Byte;
 begin
@@ -2418,15 +2477,19 @@ begin
 end;
 
 function Get16 : Word16;
+var V : Word16;
 begin
- Get16 := pWord16(@FixTbl^[0])^;
+ Move(FixTbl^[0], V, SizeOf(V));
+ Get16 := V;
  FixTbl := pByteArray(PAnsiChar(FixTbl) + 2);
  Dec(FixSz, 2);
 end;
 
 function Get32 : Word32;
+var V : Word32;
 begin
- Get32 := pWord32(@FixTbl^[0])^;
+ Move(FixTbl^[0], V, SizeOf(V));
+ Get32 := V;
  FixTbl := pByteArray(PAnsiChar(FixTbl) + 4);
  Dec(FixSz, 4);
 end;
@@ -2451,14 +2514,22 @@ end;
 begin
  GetFixups := FALSE;
  If Header.lxFRecTabOfs = 0 Then Exit;
+ if (PageNo < 1) or (PageNo > Header.lxMPages) or
+    (FixRecSize = nil) or (FixRecTbl = nil)
+  then begin FixupError := TRUE; exit; end;
  FixSz := FixRecSize^[pred(PageNo)];
  FixTbl := FixRecTbl^[pred(PageNo)];
+ if (FixSz < 0) or ((FixSz > 0) and (FixTbl = nil))
+  then begin FixupError := TRUE; exit; end;
  While FixSz > 0 do
   begin
+   recLen := RecordLength;
+   if recLen = 0 then begin FixupError := TRUE; exit; end;
    ST := Get8;
    SF := Get8;
    New(Fix);
-   if Fix = nil then exit;
+   if Fix = nil then begin FixupError := TRUE; exit; end;
+   FillChar(Fix^, SizeOf(Fix^), 0);
    Fix^.sType := ST;
    Fix^.Flags := SF;
 
@@ -2469,6 +2540,11 @@ begin
    if SF and nr16objMod = 0
     then Fix^.ObjMod := Get8
     else Fix^.ObjMod := Get16;
+
+   { Later fixup packing indexes object arrays using ObjMod - 1. }
+   if (SF and nrRType = nrRInt) and
+      ((Fix^.ObjMod = 0) or (Fix^.ObjMod > Header.lxObjCnt))
+    then begin Dispose(Fix); FixupError := TRUE; exit; end;
 
    case SF and nrRType of
     nrRInt : begin
@@ -2492,15 +2568,18 @@ begin
               GetAddFixup;
              end;
     nrRent : GetAddFixup;
-    else begin Dispose(Fix); exit; end;
+    else begin Dispose(Fix); FixupError := TRUE; exit; end;
    end;
 
    if ST and nrChain <> 0
     then begin
-          GetMem(Fix^.targets, Fix^.targetCount * sizeOf(Word16));
-          Move(FixTbl^, Fix^.targets^, Fix^.targetCount * sizeOf(Word16));
-          FixTbl := pByteArray(PAnsiChar(FixTbl) + Fix^.targetCount * sizeOf(Word16));
-          Dec(FixSz, Fix^.targetCount * sizeOf(Word16));
+          if Fix^.targetCount > 0 then
+           begin
+            GetMem(Fix^.targets, Fix^.targetCount * SizeOf(Word16));
+            Move(FixTbl^, Fix^.targets^, Fix^.targetCount * SizeOf(Word16));
+            FixTbl := pByteArray(PAnsiChar(FixTbl) + Fix^.targetCount * SizeOf(Word16));
+            Dec(FixSz, Fix^.targetCount * SizeOf(Word16));
+           end;
          end;
 
    if SF and nrNewChain <> 0
@@ -2508,15 +2587,41 @@ begin
           begin
            if ((Fix^.Flags and nrRType) <> nrRInt) or
               ((Fix^.sType and nrChain) <> 0)
-            then exit;
+            then begin Dispose(Fix); FixupError := TRUE; exit; end;
            if PageFlags <> pgValid
             then UnpackPage(PageNo,true);
            if (PageFlags <> pgValid)
-            then exit;
+            then begin Dispose(Fix); FixupError := TRUE; exit; end;
            Page := Pages^[pred(PageNo)];
+           if (Page = nil) or (PageSize <= 0) or
+              (Header.lxPageSize < 4) or (Fix^.sOffs >= PageSize)
+            then begin Dispose(Fix); FixupError := TRUE; exit; end;
+
+           { Validate the whole chain without modifying the page.  A corrupt
+             next offset must not index outside the page or form a cycle. }
+           GetMem(Seen, PageSize);
+           FillChar(Seen^, PageSize, 0);
+           Src := Fix^.sOffs;
+           chainCount := 0;
+           repeat
+            if (Src < 0) or (Src >= PageSize) or (Seen^[Src] <> 0) or
+               (chainCount >= Header.lxPageSize)
+             then begin
+                   FreeMem(Seen, PageSize);
+                   Dispose(Fix);
+                   FixupError := TRUE;
+                   exit;
+                  end;
+            Seen^[Src] := 1;
+            Inc(chainCount);
+            Next := 0;
+            Move(Page^[Src], Next, MinL(4, PageSize - Src));
+            Src := Next shr 20;
+           until Src > Header.lxPageSize - 4;
+           FreeMem(Seen, PageSize);
+
            Src := Fix^.sOffs;
            baseSet := FALSE;
-           fixCount := succ(Fixups^.Count);
            repeat
             Next := 0;
             Move(Page^[Src], Next, MinL(4, PageSize - Src));
@@ -2526,12 +2631,6 @@ begin
                    Base := Fix^.Target.intRef - (Next and $FFFFF);
                    baseSet := TRUE;
                   end;
-            foundDup := False;
-            For I := fixCount to Fixups^.Count do
-             if pLXreloc(Fixups^.At(pred(I)))^.sOffs = Src
-              then begin foundDup := True; break; end;
-            if foundDup or (succ(Fixups^.Count - fixCount) > Header.lxPageSize shr 2)
-             then break; {we have a loop or error here}
             New(newFix); newFix^ := Fix^;
             newFix^.sOffs := Src;
             newFix^.Target.intRef := Base + (Next and $FFFFF);
@@ -2824,6 +2923,7 @@ begin
     nrOff32,                           { 32-bit offset (32-bits) }
     nrSoff32 : J := 4;                 { 32-bit self-relative offset (32-bits) }
     nrPtr48  : J := 6;                 { 16:32 pointer (48-bits) }
+    else Continue;
    end;
    if Fixup^.sType and nrChain = 0
     then begin
@@ -2855,6 +2955,7 @@ begin
   then GetMem(cPage, Header.lxPageSize);
  For P := 1 to Header.lxMPages do
   begin
+   if FixupError then break;
    tmpPF := packFlags;
    if (Header.lxMFlags and (lxNoIntFix + lxNoExtFix) <> 0) or
       (ObjMap^[P].PageFlags = pgZeroed)
@@ -2934,7 +3035,11 @@ begin
  For P := 1 to Header.lxMPages do
   begin
    Fx^.FreeAll;
-   if not GetFixups(P, Fx) then Continue;
+   if not GetFixups(P, Fx) then
+    begin
+     if FixupError then break;
+     Continue;
+    end;
    Chg := FALSE;
 
    For I := Fx^.Count downto 1 do
@@ -2974,6 +3079,7 @@ begin
              nrPtr48  : break;{ CS is known only at runtime }
              nrOff32  : if ApplyMask and 4 <> 0 then S := 4 else break;
              nrSoff32 : break;{ Not supported (yet?) }
+             else break;
             end;
             if (F^.sType and nrChain <> 0)
              then begin
@@ -2990,7 +3096,7 @@ begin
                then Move(A.L, pByteArray(Pages^[pred(P)])^[pOfs^],
                          minL(S, Header.lxPageSize - pOfs^))
                else
-              if pOfs^ + S >= 0
+              if pOfs^ >= $10000 - S
                then Move(A.B[$10000 - pOfs^], Pages^[pred(P)]^, S - ($10000 - pOfs^));
               Inc(pOfs); Dec(J);
              end;
@@ -3069,6 +3175,8 @@ var
  UnpFunc : Function(var srcData, destData; srcDataSize : longint; var dstDataSize : Longint) : boolean;
  rc      : boolean;
 begin
+ UnpackPageNoTouch := nil;
+ UnpPageSize := 0;
  uD:= nil;
  with ObjMap^[PageNo] do
  begin
@@ -3444,7 +3552,10 @@ begin
                     end;
       pgInvalid,
       pgZeroed    : pL := nil;
-      else isPacked := FALSE;
+      else begin
+            pL := nil;
+            isPacked := FALSE;
+           end;
      end;
      if (PageSize > 0) and (pL <> nil)
       then begin

@@ -177,6 +177,7 @@ begin
     ii := 0;
     while Source[ii] <> #0 do
        if (Source[ii] = '\') or (Source[ii] = '/') then exit else inc(ii);
+    ii := 0;
     while Edit[ii] <> #0 do
        if (Edit[ii] = '\') or (Edit[ii] = '/') then exit else inc(ii);
 
