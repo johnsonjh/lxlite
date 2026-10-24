@@ -365,7 +365,7 @@ begin
  616 "À´Example: lxLite *.exe *.dll *.fon *.sys /e /p+ /bd-x /yur /ass:2 /osa:*.stub"
  617 "Ã /G[T|U]"
  618 "³  Output [T]raditional CP437 or [U]nicode UTF-8, including logs and errors"
- 619 "³  Defaults: /GU on Unix, /GT elsewhere; -GT and -GU are also accepted"
+ 619 "³  Default is /GU for Unix-like systems and /GT for Windows and other systems"
  620 "Ã Output character encoding: %s"
  621 "UTF-8"
  622 "CP437"
