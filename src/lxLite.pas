@@ -106,20 +106,20 @@ var
  pZS  : pZTstrCollection;
  S    : string;
 begin
- SetColor($0E); Write(GetResourceString(msgListCfg)); NL;
+ SetColor($0E); Write(OutputResource(msgListCfg)); NL;
  For I := 1 to cfgIDs^.Count do
   begin
-   SetColor($07); Write('Ã[');
+   SetColor($07); Write(OutputCP437('Ã['));
    SetColor($0A); Write(pString(cfgIDs^.At(pred(I)))^);
    SetColor($07); Write(']'); NL;
    pSC := pStringCollection(cfgOpts^.At(pred(I)));
    For J := 1 to pSC^.Count do
     begin
-     SetColor($07); Write('Ã ');
+     SetColor($07); Write(OutputCP437('Ã '));
      SetColor($02); Write(pString(pSC^.At(pred(J)))^); NL;
     end;
   end;
- SetColor($0E); Write(GetResourceString(msgListSel)); NL;
+ SetColor($0E); Write(OutputResource(msgListSel)); NL;
  For I := 1 to extra^.Count do
   begin
    pZS := pFileMatch(extra^.At(pred(I)))^.matchStrings;
@@ -132,7 +132,7 @@ begin
       then begin
             if xPos <> 1000 then NL;
             SetColor($07);
-            if xPos <> 1000 then Write('Ã ') else Write('Ã[');
+            if xPos <> 1000 then Write(OutputCP437('Ã ')) else Write(OutputCP437('Ã['));
             Write('/');
             SetColor($0A);
             xPos := 3;
@@ -144,7 +144,7 @@ begin
    pSC := extraOpts^.At(pred(I));
    For J := 1 to pSC^.Count do
     begin
-     SetColor($07); Write('Ã ');
+     SetColor($07); Write(OutputCP437('Ã '));
      SetColor($02); Write(pString(pSC^.At(pred(J)))^); NL;
     end;
   end;
@@ -155,8 +155,8 @@ begin
  if ec <> lxeOK
   then begin
         SetColor($0C);
-        Write(GetResourceString(msgLXerror + ec));
-        SetColor($0B); Writeln(#13'Ã');
+        Write(OutputResource(msgLXerror + ec));
+        SetColor($0B); Writeln(OutputCP437(#13'Ã'));
         CheckError := TRUE;
        end
   else CheckError := FALSE;
@@ -177,7 +177,7 @@ begin
   then begin
         FillChar(S[1], val, 'Û');
         SetColor($03);
-        Write(S,']' + Strg(#8, length(S) + 2) + '[');
+        Write(OutputCP437(S),']' + Strg(#8, length(S) + 2) + '[');
         prevProgressValue := val;
        end;
 end;
@@ -207,14 +207,14 @@ var
  N   : Integer;
 begin
  Q := FormatStr(idQ, argQ);
- A := GetResourceString(idA);
+ A := OutputResource(idA);
  if auxAsk[qNo] <> #0
   then ch := auxAsk[qNo]
   else ch := opt.AskStatus[qNo].Reply;
  N := First(upCase(ch), A);
  if N <> 0 then begin Ask := N; exit; end;
  SetColor($02);
- Write('À ', Q, ' ');
+ Write(OutputCP437('À '), Q, ' ');
  repeat
   Alt := FALSE;
   ch := upCase(ReadKey);
@@ -227,7 +227,7 @@ begin
          break;
         end;
  until FALSE;
- Writeln(Ch, #13'Ã');
+ Writeln(Ch, OutputCP437(#13'Ã'));
 end;
 
 var
@@ -331,11 +331,11 @@ begin
  if opt.Log and lcfUnsucc <> 0
   then begin
         bk := Cntry^.TimeStr(toStdTimeL);
-        _d := GetResourceString(rc);
+        _d := OutputResource(rc);
         Writeln(logFile, FormatStr(msgLogError, [bk, Short, _d]));
        end;
  // we also write all errors to stderr
- WriteError(GetResourceString(rc));
+ WriteError(OutputResource(rc));
 end;
 
 const
@@ -369,6 +369,7 @@ begin
  if not OptBackup then exit;
  OptBackup := FALSE;
  Move(oldOpt^, opt, sizeOf(opt));
+ ApplyOutputMode;
  FreeMem(oldOpt, sizeOf(opt));
  Dispose(exclude^.matchStrings, Destroy);
  Dispose(fNames, Destroy);
@@ -503,8 +504,8 @@ begin
  if (not opt.ForceRepack) and (askD <> 1) and (askX <> 1) and (not opt.doUnpack) and
     (LX^.isPacked(opt.Realign, I, opt.PackMode, opt.SaveMode, oldDbgInfoOfs, fs))
   then begin
-        SetColor($0C); Write(GetResourceString(msgAlreadyProc));
-        SetColor($0B); Writeln(#13'Ã');
+        SetColor($0C); Write(OutputResource(msgAlreadyProc));
+        SetColor($0B); Writeln(OutputCP437(#13'Ã'));
         if opt.Log and lcfAlways = lcfAlways then LogError(msgAlreadyProc);
         Goto locEx;
        end;
@@ -606,8 +607,8 @@ begin
         SetColor($0B); Write(FormatStr(msgBackingUp, [Short, bk]));
         if not FileRename(fName, bk)
          then begin
-               SetColor($0C); Write(GetResourceString(msgBackupError));
-               SetColor($0B); Writeln(#13'Ã');
+               SetColor($0C); Write(OutputResource(msgBackupError));
+               SetColor($0B); Writeln(OutputCP437(#13'Ã'));
                LogError(msgBackupError); Goto locEx;
               end;
         Write(#13); ClearToEOL;
@@ -687,27 +688,27 @@ SaveLX:
         case askD of
          1 : if dbgOut <> ''
               then Writeln(logFile, FormatStr(msgLogDebug, [dbgOut]))
-              else Writeln(logFile, GetResourceString(msgLogDebugRmv));
-         2 : Writeln(logFile, GetResourceString(msgLogDebugKept));
+              else Writeln(logFile, OutputResource(msgLogDebugRmv));
+         2 : Writeln(logFile, OutputResource(msgLogDebugKept));
         end;
         case askX of
          1 : if xtrOut <> ''
               then Writeln(logFile, FormatStr(msgLogXtra, [xtrOut]))
-              else Writeln(logFile, GetResourceString(msgLogXtraRmv));
+              else Writeln(logFile, OutputResource(msgLogXtraRmv));
          2 : Writeln(logFile, msgLogXtraKept);
         end;
         case askN of
          1 : {if xtrOut <> ''
               then Writeln(logFile, FormatStr(msgLogXtra, [xtrOut]))
-              else }Writeln(logFile, GetResourceString(msgLogNResRmv));
+              else }Writeln(logFile, OutputResource(msgLogNResRmv));
          2 : Writeln(logFile, msgLogNResKept);
         end;
         case askB of
-         1 : Writeln(logFile, GetResourceString(msgLogBackOverw));
-         2 : Writeln(logFile, GetResourceString(msgLogBackSkip));
+         1 : Writeln(logFile, OutputResource(msgLogBackOverw));
+         2 : Writeln(logFile, OutputResource(msgLogBackSkip));
         end;
         case AskU of
-         1 : Writeln(logFile, GetResourceString(msgLogModLocked));
+         1 : Writeln(logFile, OutputResource(msgLogModLocked));
         end;
         if stbOut <> ''
          then Writeln(logFile, FormatStr(msgLogStubOut, [stbOut]));
@@ -726,7 +727,7 @@ begin
  New(ModDef, Create(16, 16));
  For I := 1 to 99 do
   begin
-   S := GetResourceString(I);
+   S := SysLib.GetResourceString(I);
    if charCount('.', S) = 2
     then begin
           New(MD);
@@ -787,7 +788,7 @@ begin
  if allDone or not opt.RecurSearch then Exit;
  if nf = 0
   then begin
-        SetColor($0B); Write('À ', Short(_d, 77));
+        SetColor($0B); Write(OutputCP437('À '), Short(_d, 77));
         ClearToEOL; Write(#13);
        end;
  Dos.FindFirst(_d + '*', Archive or Hidden or SysFile or Directory, sr);
@@ -838,7 +839,7 @@ begin
         SetColor($4F); ClearToEOL;
         Writeln(FormatStr(msgRuntime1, [exitCode, errorAddr, Version]));
         ClearToEOL;
-        Writeln(GetResourceString(msgRuntime2));
+        Writeln(OutputResource(msgRuntime2));
        end;
  if not RedirOutput
   then begin
@@ -854,6 +855,7 @@ var
 
 begin
  SetColor($0F);
+ ApplyOutputMode;
  @OldExit := ExitProc; ExitProc := @MyExitProc;
 // HeapBlock := 64 * 1024; {for VP 1.10}
 
@@ -904,6 +906,6 @@ begin
 done:
  SetColor($01);
  if not RedirOutput then Write(#13);
- Writeln(GetResourceString(msgDone));
+ Writeln(OutputResource(msgDone));
 end.
 

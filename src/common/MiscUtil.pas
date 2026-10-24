@@ -7,7 +7,7 @@ const
 {$ifdef OS2}
  tickerFreq             = 100;  {ticker frequence in 100000/Freq (1000)}
 {$endif}
-{$ifdef WIN32}
+{$ifdef MSWINDOWS}
  tickerFreq             = 100;  {ticker frequence in 100000/Freq (1000)}
 {$endif}
 {$ifdef UNIX}
@@ -104,7 +104,7 @@ type
 
 Implementation 
 {$ifDef os2}   uses os2base; {$endIf}
-{$ifDef win32} uses windows; {$endIf}
+{$ifDef MSWINDOWS} uses windows; {$endIf}
 {$ifDef unix}  uses Unix; {$endIf}
 
 constructor tObject.Create;

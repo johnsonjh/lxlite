@@ -3,7 +3,7 @@ Unit SysLib;
 
 Interface uses Dos, miscUtil, Collect
 {$ifdef OS2}  , os2def{$endif}
-{$ifdef win32},windows{$endif};
+{$ifdef MSWINDOWS},windows{$endif};
 
 {$ifdef OS2}
 function DosReplaceModule(OldModName,NewModName,BackModName: PChar): ApiRet; cdecl; orgname;
@@ -499,7 +499,7 @@ begin
  GetMem(dn, succ(length(dName)));
  StrPCopy(sn, sName);
  StrPCopy(dn, dName);
-{$ifdef WIN32}
+{$ifdef MSWINDOWS}
  fileCopy := CopyFile(sn, dn, False);
 {$else}
  fileCopy := False;

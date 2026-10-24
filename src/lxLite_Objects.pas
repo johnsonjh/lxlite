@@ -36,6 +36,7 @@ var
  ModDef    : pModuleCollection;
 
  procedure PrintHeader;
+ procedure ApplyOutputMode;
  procedure WriteError(const msg: string);
  procedure Stop(eCode : Word; const ParmStr : string);
  function  FormatStr(Template : Longint; Params : array of const) : string;
@@ -62,6 +63,15 @@ begin
        end;
 end;
 
+{ CRT's 80-column byte-oriented writer can split a multibyte UTF-8 glyph.
+  Use the regular text stream for Unicode output, including a TTY. }
+procedure ApplyOutputMode;
+begin
+ SwitchStdOut(opt.UseStdOut or opt.UnicodeOutput);
+ ConfigureOutputTTY;
+ SetColor(textAttr);
+end;
+
 procedure WriteError(const msg: string);
 begin
  Writeln(StdErr, msg);
@@ -84,7 +94,7 @@ begin
    vtChar: nP[I - Low(Params)] := PtrUInt(Ord(Params[I].VChar));
    else nP[I - Low(Params)] := PtrUInt(Params[I].VPointer);
  end;
- S := GetResourceString(Template);
+ S := OutputResource(Template);
  Drivers.FormatStr(Result, S, nP);
 end;
 
@@ -95,11 +105,12 @@ begin
  if Already then Exit;
  Already := TRUE;
  Write(FormatStr(msgProgHeader1, [Version])); NL;
- Write(GetResourceString(msgProgHeader2)); NL;
- Write(GetResourceString(msgProgHeader3)); NL;
- Write(GetResourceString(msgProgHeader4)); NL;
- Write(GetResourceString(msgProgHeader5)); NL;
- Write(GetResourceString(msgProgHeader6)); NL;
+ Write(OutputResource(msgProgHeader2)); NL;
+ Write(OutputResource(msgProgHeader3)); NL;
+ Write(OutputResource(msgProgHeader4)); NL;
+ Write(OutputResource(msgProgHeader5)); NL;
+ Write(OutputResource(msgProgHeaderX)); NL;
+ Write(OutputResource(msgProgHeader6)); NL;
 end;
 
 procedure NL;
@@ -117,8 +128,8 @@ begin
  if Rows = 0
   then if not (RedirOutput or RedirInput)
         then begin
-              S := GetResourceString(msgMore);
-              SetColor($30); I := (80 - length(S)) div 2;
+              S := OutputResource(msgMore);
+              SetColor($30); I := (80 - OutputWidth(S)) div 2;
               Write(Strg(' ', I), S); ClearToEOL;
               repeat
                I := 0;
@@ -129,7 +140,7 @@ begin
                 #27 : begin
                        Write(#13); SetColor($07); ClearToEOL;
                        SetColor($04);
-                       Writeln(GetResourceString(msgAborted));
+                       Writeln(OutputResource(msgAborted));
                        Halt(1);
                       end;
                 else I := 1;
@@ -138,7 +149,7 @@ begin
               Write(#13); SetColor($07); ClearToEOL;
              end
         else Rows := hi(WindMax);
- textAttr := Attr;
+ SetColor(Attr);
 end;
 
 Procedure Stop;
@@ -174,7 +185,8 @@ begin
            B := TRUE;
            For I := msgHelpFirst to msgHelpLast do
             begin
-             S := GetResourceString(I);
+             { The help markup is still inspected in CP437, before display. }
+             S := SysLib.GetResourceString(I);
              case S[1] of
               '³' : if B then SetColor($09);
               'Ã' : case S[2] of
@@ -183,7 +195,13 @@ begin
                     end;
               'À' : SetColor($08);
              end;
-             Write(S); NL;
+             Write(OutputCP437(S)); NL;
+             if I = 532 then begin
+               SetColor($0B);
+               Write(OutputResource(617)); NL;
+               Write(OutputResource(618)); NL;
+               Write(OutputResource(619)); NL;
+             end;
             end;
           end;
   else begin 
@@ -222,7 +240,7 @@ end;
 
 procedure AddS(msgIndex : Longint);
 begin
- AddStr(GetResourceString(msgIndex));
+ AddStr(OutputResource(msgIndex));
 end;
 
 function txtOS(OS : Byte) : string;
@@ -235,9 +253,9 @@ end;
 procedure Separator(S : string);
 begin
  SetColor(atInfo);
- Write('Ã');
+ Write(OutputCP437('Ã'));
  SetColor(atSeparator);
- Write(S + Strg('Ä', 59 - length(S))); NL;
+ Write(S + OutputCP437(Strg('Ä', 59 - OutputWidth(S)))); NL;
  SetColor(atInfo);
 end;
 
@@ -246,15 +264,15 @@ var
  i : Integer;
 begin
  if NT^.Count = 0
-  then begin Separator(''); Write(GetResourceString(msgEmpty)); NL; end
-  else Separator(GetResourceString(msgNameTableHdr));
+  then begin Separator(''); Write(OutputResource(msgEmpty)); NL; end
+  else Separator(OutputResource(msgNameTableHdr));
  For i := 1 to NT^.Count do
   with pNameTblRec(NT^.At(pred(I)))^ do
    begin
-    if i < NT^.Count then Write('³') else Write('Ã');
+    if i < NT^.Count then Write(OutputCP437('³')) else Write(OutputCP437('Ã'));
     Write(' ', Sstr(Ord, 5, '0'), ' ');
-    if i < NT^.Count then Write('³') else Write('Á');
-    Write(' ', Name^); NL;
+    if i < NT^.Count then Write(OutputCP437('³')) else Write(OutputCP437('Á'));
+    Write(' ', OutputCP437(Name^)); NL;
    end;
 end;
 
@@ -264,20 +282,20 @@ var
  pS  : pString;
 begin
  if SC^.Count = 0
-  then begin Separator(''); Write(GetResourceString(msgEmpty)); NL; end
-  else Separator(GetResourceString(msgImpTableHdr));
+  then begin Separator(''); Write(OutputResource(msgEmpty)); NL; end
+  else Separator(OutputResource(msgImpTableHdr));
  j := 0;
  for i := 1 to SC^.Count do
   begin
    pS := SC^.At(pred(I));
-   if i < SC^.Count then Write('³') else Write('Ã');
+   if i < SC^.Count then Write(OutputCP437('³')) else Write(OutputCP437('Ã'));
    Write(' ', Sstr(i, 5, '0'), ' ');
-   if i < SC^.Count then Write('³') else Write('Á');
+   if i < SC^.Count then Write(OutputCP437('³')) else Write(OutputCP437('Á'));
    Write(' ', Sstr(j, 5, '0'), ' ');
-   if i < SC^.Count then Write('³') else Write('Á');
+   if i < SC^.Count then Write(OutputCP437('³')) else Write(OutputCP437('Á'));
    if pS <> nil
     then begin
-          Write(' ', pS^);
+          Write(' ', OutputCP437(pS^));
           Inc(j, succ(length(pS^)));
          end
     else Inc(j);
@@ -302,7 +320,7 @@ begin
         MD := ModDef^.At(I);
         if ProcOrd < MD^.defLength
          then begin
-               tmpS := GetResourceString(MD^.defStart + ProcOrd);
+               tmpS := OutputResource(MD^.defStart + ProcOrd);
                if tmpS = '' then exit;
               end
          else exit;
@@ -334,9 +352,9 @@ begin
   then begin
         MD := ModDef^.At(I);
         if ProcOrd < MD^.defLength
-         then tS := GetResourceString(MD^.defStart + ProcOrd);
+         then tS := OutputResource(MD^.defStart + ProcOrd);
        end;
- tmpS := tmpS + '.' + long2str(ProcOrd);
+ tmpS := OutputCP437(tmpS) + '.' + long2str(ProcOrd);
  if tS <> '' then tmpS := tmpS + '(' + tS + ')';
  ImpByOrd := @tmpS;
 end;
@@ -354,9 +372,9 @@ begin
    if pS <> nil then Inc(j, succ(length(pS^))) else Inc(j);
    pS := nil;
   end;
- tmpS := pString(ImpModTbl^.At(pred(ModIndx)))^;
+ tmpS := OutputCP437(pString(ImpModTbl^.At(pred(ModIndx)))^);
  if pS <> nil
-  then tmpS := tmpS + '.' + pS^
+  then tmpS := tmpS + '.' + OutputCP437(pS^)
   else tmpS := tmpS + FormatStr(msgProcOffs, [ProcOfs]);
  ImpByName := @tmpS;
 end;
@@ -378,7 +396,7 @@ begin
               lxPMapi   : AddS(msgPMapplication);
               else AddS(msgUnknownType);
              end;
-             S := S + ' ' + GetResourceString(msgApplication);
+             S := S + ' ' + OutputResource(msgApplication);
             end;
   lxDLL,
   lxPMDLL,
@@ -406,7 +424,7 @@ begin
  if opt.Verbose and vfHeaderL0 <> 0
   then begin
         Write(FormatStr(msgModuleType, [S])); NL;
-        S := GetResourceString(msgCPU + Header.lxCpu - lxCPU286);
+        S := OutputResource(msgCPU + Header.lxCpu - lxCPU286);
         Write(FormatStr(msgReqCPU, [S, Header.lxVer shr 16, SmallWord(Header.lxVer)])); NL;
        end;
  if opt.Verbose and vfHeaderL1 <> 0
@@ -455,16 +473,22 @@ begin
         For i := 1 to ResNameTbl^.Count do
          with pNameTblRec(ResNameTbl^.At(pred(I)))^ do
           if Ord = 0
-           then begin Write(FormatStr(msgModuleName, [Name])); NL; break; end;
+           then begin
+                 if Name <> nil then tmpS := OutputCP437(Name^) else tmpS := '';
+                 Write(FormatStr(msgModuleName, [tmpS])); NL; break;
+                end;
         For i := 1 to NResNameTbl^.Count do
          with pNameTblRec(NResNameTbl^.At(pred(I)))^ do
           if Ord = 0
-           then begin Write(FormatStr(msgDescription, [Name])); NL; break; end;
+           then begin
+                 if Name <> nil then tmpS := OutputCP437(Name^) else tmpS := '';
+                 Write(FormatStr(msgDescription, [tmpS])); NL; break;
+                end;
        end;
  if opt.Verbose and vfObjects <> 0
   then begin
         Separator('');
-        Write(GetResourceString(msgObjectTable)); NL;
+        Write(OutputResource(msgObjectTable)); NL;
         Separator('');
         For I := 1 to Header.lxObjCnt do
          with ObjTable^[I] do
@@ -472,16 +496,16 @@ begin
            SetColor(atInfo);
            if (I = 1) or (opt.Verbose and vfPageMap = vfPageMap)
             then begin
-                  Write(GetResourceString(msgObjTableHdr));
+                  Write(OutputResource(msgObjTableHdr));
                   NL;
                  end;
-           Write('³', I:3, ' ', Hex8(oBase), ' ', Hex8(oSize), ' ');
+           Write(OutputCP437('³'), I:3, ' ', Hex8(oBase), ' ', Hex8(oSize), ' ');
            SetColor(atFlags);
            For J := 0 to 14 do
             begin
              if J > 2 then Write(' ');
              if (oFlags and (1 shl (J + byte(J > 10))) <> 0)
-              then Write('û ') else Write('  ');
+              then Write(OutputCP437('û ')) else Write('  ');
              if J > 2 then Write(' ');
             end;
            NL;
@@ -490,18 +514,18 @@ begin
                   if oMapSize > 0
                    then begin
                          SetColor(atInfo);
-                         Write('³  ');
+                         Write(OutputCP437('³  '));
                          SetColor(atHLinfo);
-                         Write(GetResourceString(msgPageTableHdr)); NL;
+                         Write(OutputResource(msgPageTableHdr)); NL;
                         end;
                   For J := 1 to oMapSize do
                    with ObjMap^[pred(oPageMap + J)] do
                     begin
                      SetColor(atInfo);
-                     Write('³   ');
+                     Write(OutputCP437('³   '));
                      SetColor(atHLinfo);
-                     Write(     txtGfx[J = oMapSize][1], ' ', Sstr(pred(oPageMap + J), 8, '0'),
-                           ' ', txtGfx[J = oMapSize][2], ' ');
+                     Write(     OutputChar(txtGfx[J = oMapSize][1]), ' ', Sstr(pred(oPageMap + J), 8, '0'),
+                           ' ', OutputChar(txtGfx[J = oMapSize][2]), ' ');
                      case PageFlags of
                       pgIterData,
                       pgIterData2,
@@ -511,14 +535,14 @@ begin
                        Write(Hex8(Header.lxDataPageOfs + PageDataOffset shl Header.lxPageShift));
                       else Write('--------');
                      end;
-                     Write(' ', txtGfx[J = oMapSize][2], ' ', Hex4(PageSize),
-                           ' ', txtGfx[J = oMapSize][2], ' ');
+                     Write(' ', OutputChar(txtGfx[J = oMapSize][2]), ' ', Hex4(PageSize),
+                           ' ', OutputChar(txtGfx[J = oMapSize][2]), ' ');
                      if PageFlags <= pgIterData2
-                      then Write(GetResourceString(msgPageFlags+PageFlags)) else
+                      then Write(OutputResource(msgPageFlags+PageFlags)) else
                      if PageFlags = pgIterData3
-                      then Write(GetResourceString(msgPageM3))
-                      else Write(GetResourceString(msgPageFlags+succ(pgIterData2)));
-                     Write(' ', txtGfx[J = oMapSize][3]);
+                      then Write(OutputResource(msgPageM3))
+                      else Write(OutputResource(msgPageFlags+succ(pgIterData2)));
+                     Write(' ', OutputChar(txtGfx[J = oMapSize][3]));
                      NL;
                     end;
                  end;
@@ -527,44 +551,44 @@ begin
  if (opt.Verbose and vfResName <> 0)
   then begin
         Separator('');
-        Write(GetResourceString(msgResTableHdr)); NL;
+        Write(OutputResource(msgResTableHdr)); NL;
         ShowNamesTable(ResNameTbl);
       end;
  if (opt.Verbose and vfNResName <> 0)
   then begin
         Separator('');
-        Write(GetResourceString(msgNResTableHdr)); NL;
+        Write(OutputResource(msgNResTableHdr)); NL;
         ShowNamesTable(NResNameTbl);
       end;
  if (opt.Verbose and vfImpName <> 0)
   then begin
         Separator('');
-        Write(GetResourceString(msgImportTable)); NL;
+        Write(OutputResource(msgImportTable)); NL;
         ShowImportTable(ImpModTbl);
        end;
  if (opt.Verbose and vfImpProc <> 0)
   then begin
         Separator('');
-        Write(GetResourceString(msgImpProcHdr)); NL;
+        Write(OutputResource(msgImpProcHdr)); NL;
         ShowImportTable(ImpProcTbl);
        end;
  if (opt.Verbose and vfEntTable <> 0)
   then begin
         Separator('');
-        Write(GetResourceString(msgEntryTable)); NL;
+        Write(OutputResource(msgEntryTable)); NL;
         if EntryTbl^.Count = 0
-         then begin Separator(''); Write(GetResourceString(msgEmpty)); NL; end
-         else Separator(GetResourceString(msgEntryTblHdr));
+         then begin Separator(''); Write(OutputResource(msgEmpty)); NL; end
+         else Separator(OutputResource(msgEntryTblHdr));
         For i := 1 to EntryTbl^.Count do
          with pEntryPoint(EntryTbl^.At(pred(I)))^ do
           begin
            if BndType = btEmpty then Continue;
-           Write(txtGfx[i = EntryTbl^.Count][4], ' ',
-                 Sstr(Ordinal, 5, '0'), ' ', txtGfx[i = EntryTbl^.Count][5], ' ');
+           Write(OutputChar(txtGfx[i = EntryTbl^.Count][4]), ' ',
+                 Sstr(Ordinal, 5, '0'), ' ', OutputChar(txtGfx[i = EntryTbl^.Count][5]), ' ');
            if BndType <= btEntryFwd
-            then Write(GetResourceString(msgEntryPoints + BndType))
-            else Write(GetResourceString(msgEntryPoints + succ(btEntryFwd)));
-           S := ' ' + txtGfx[i = EntryTbl^.Count][5];
+            then Write(OutputResource(msgEntryPoints + BndType))
+            else Write(OutputResource(msgEntryPoints + succ(btEntryFwd)));
+           S := ' ' + OutputChar(txtGfx[i = EntryTbl^.Count][5]);
            Write(S);
            case BndType of
             btEntry16:
@@ -598,14 +622,14 @@ begin
  if (opt.Verbose and vfFixups <> 0)
   then begin
         Separator('');
-        Write(GetResourceString(msgRelocTable)); NL;
+        Write(OutputResource(msgRelocTable)); NL;
         Separator('');
         New(Fixups, Create(16, 16));
         For I := 1 to Header.lxObjCnt do
          with ObjTable^[I] do
           For J := 1 to oMapSize do
            begin
-            Write('Ã ');
+            Write(OutputCP437('Ã '));
             SetColor(atHLinfo);
             Write(FormatStr(msgRelocTblHdr, [I, J, pred(oPageMap + J), 
               oBase + lx386PageSize * (J - 1)])); NL;
@@ -627,15 +651,15 @@ begin
              with pLXreloc(Fixups^.At(pred(K)))^ do
               begin
                case sType and nrSType of
-                nrSByte:  S := GetResourceString(msgFixByte);
-                nrSSeg:   S := GetResourceString(msgFixSelector);
-                nrSPtr:   S := GetResourceString(msgFixPtr16);
-                nrSOff:   S := GetResourceString(msgFixOfs16);
-                nrPtr48:  S := GetResourceString(msgFixPtr48);
-                nrOff32:  S := GetResourceString(msgFixOfs32);
-                nrSoff32: S := GetResourceString(msgFixRelOfs32);
+                nrSByte:  S := OutputResource(msgFixByte);
+                nrSSeg:   S := OutputResource(msgFixSelector);
+                nrSPtr:   S := OutputResource(msgFixPtr16);
+                nrSOff:   S := OutputResource(msgFixOfs16);
+                nrPtr48:  S := OutputResource(msgFixPtr48);
+                nrOff32:  S := OutputResource(msgFixOfs32);
+                nrSoff32: S := OutputResource(msgFixRelOfs32);
                end;
-               S := S + GetResourceString(msgFixOf);
+               S := S + OutputResource(msgFixOf);
                case Flags and nrRtype of
                 nrRint: begin
                          S := S + FormatStr(msgFixObject, [ObjMod]);
@@ -646,7 +670,7 @@ begin
                 nrRnam: S := S + FormatStr(msgFixImport, [ImpByName(ObjMod, Target.extRef.Ord)]);
                 nrRent: S := S + FormatStr(msgFixModEntry, [ObjMod]);
                end;
-               Write('³ ');
+               Write(OutputCP437('³ '));
                if (sType and nrChain <> 0)
                 then begin
                       L := targetCount;
@@ -665,7 +689,7 @@ begin
                  if (M >= lo(WindMax) - 5) or (M = -1)
                   then begin
                         if M <> -1 then NL;
-                        M := 0; Write('³ ')
+                        M := 0; Write(OutputCP437('³ '))
                        end;
                  SetColor(atFixupOfs);
                  Write(Hex4(pFixOfs^), ' ');
@@ -711,14 +735,14 @@ begin
           if (PageUnpFlags and 2<>0) and (PageFlags in [pgIterData, pgIterData2, pgIterData3]) then
           begin
             pdata:=UnpackPageNoTouch(StartP,psize); Fst:=true;
-            rs:=GetResourceString(msgPageFlags+pgValid)
+            rs:=OutputResource(msgPageFlags+pgValid)
           end else
           begin
             pdata:=Pages^[StartP-1]; Fst:=false;
             psize:=PageSize;
-            if PageFlags <= pgIterData2 then rs:=GetResourceString(msgPageFlags+PageFlags) else
-            if PageFlags = pgIterData3 then rs:=GetResourceString(msgPageM3) else
-               rs:=GetResourceString(msgPageFlags+succ(pgIterData2));
+            if PageFlags <= pgIterData2 then rs:=OutputResource(msgPageFlags+PageFlags) else
+            if PageFlags = pgIterData3 then rs:=OutputResource(msgPageM3) else
+               rs:=OutputResource(msgPageFlags+succ(pgIterData2));
           end;
         end;
         SetColor($0A);
@@ -814,9 +838,9 @@ begin
             inc(pd,PageSize);
           end else Pages^[StartP-1]:=nil;
 
-          if PageFlags <= pgIterData2 then rs:=GetResourceString(msgPageFlags+PageFlags) else
-          if PageFlags = pgIterData3 then rs:=GetResourceString(msgPageM3) else
-             rs:=GetResourceString(msgPageFlags+succ(pgIterData2));
+          if PageFlags <= pgIterData2 then rs:=OutputResource(msgPageFlags+PageFlags) else
+          if PageFlags = pgIterData3 then rs:=OutputResource(msgPageM3) else
+             rs:=OutputResource(msgPageFlags+succ(pgIterData2));
           st:=FormatStr(msgReadingPage, [Sstr(StartP, 5, '0'), rs, Sstr(PageSize, 4, '0')]);
         end;
         SetColor($0A);
@@ -897,8 +921,11 @@ end;
 
 begin
  SetColor($0B);
- Write(GetResourceString(msgConfigHeader)); NL;
+ Write(OutputResource(msgConfigHeader)); NL;
  SetColor($03);
+ if opt.UnicodeOutput then S := OutputResource(msgUTF8)
+                      else S := OutputResource(msgTraditional);
+ Write(FormatStr(msgOutputMode, [S])); NL;
  Write(FormatStr(msgShowInfo, [VerbLvl])); NL;
  Write(FormatStr(msgForceIdle, [ONOFF[opt.ForceIdle]])); NL;
  Write(FormatStr(msgUnpack, [ONOFF[opt.Unpack]])); NL;
@@ -908,7 +935,7 @@ begin
   then begin
         if opt.stubName <> ''
          then S := opt.stubName
-         else S := GetResourceString(msgRemoveStub);
+         else S := OutputResource(msgRemoveStub);
         Write(FormatStr(msgReplaceStub, [S])); NL;
        end;
  case opt.SaveMode and svfAlignFirstObj of
@@ -916,18 +943,18 @@ begin
   svfFOalnShift  : I := msgAlignFOShift;
   svfFOalnSector : I := msgAlignFOSect;
  end;
- S := GetResourceString(I);
+ S := OutputResource(I);
  Write(FormatStr(msgAlignFO, [S])); NL;
 
  case opt.SaveMode and svfAlignEachObj of
   svfEOalnShift  : I := msgAlignObjShift;
   svfEOalnSector : I := msgAlignObjSect;
  end;
- S := GetResourceString(I);
+ S := OutputResource(I);
  Write(FormatStr(msgAlignObj, [S])); NL;
 
  if opt.Realign = NoRealign
-  then S := GetResourceString(msgDontChange)
+  then S := OutputResource(msgDontChange)
   else S := long2str(1 shl opt.Realign);
  Write(FormatStr(msgSetPageShift, [S])); NL;
  if not opt.doUnpack
@@ -946,10 +973,10 @@ begin
                pkfFixupsVer4 : J := msgFXv4;
                pkfFixupsMax  : J := msgFXmax;
               end;
-        Write(FormatStr(msgRunLength, [GetResourceString(I)])); NL;
+        Write(FormatStr(msgRunLength, [OutputResource(I)])); NL;
         Write(FormatStr(msgLempelZiv, [ONOFF[opt.PackMode and pkfLempelZiv <> 0]])); NL;
         Write(FormatStr(msgSixPack, [ONOFF[opt.PackMode and pkfSixPack <> 0]])); NL;
-        Write(FormatStr(msgFixupsPack, [GetResourceString(J)])); NL;
+        Write(FormatStr(msgFixupsPack, [OutputResource(J)])); NL;
        end;
  S := '';
  For I := 1 to exclude^.matchStrings^.Count do
@@ -1129,7 +1156,7 @@ begin
          'S' : begin
                 Delete(parmStr, 1, 1);
                 opt.UseStdOut := isEnabled;
-                SwitchStdOut(opt.UseStdOut);
+                ApplyOutputMode;
                end;
          else opt.ColoredOutput := isEnabled;
         end;
@@ -1141,6 +1168,17 @@ begin
           else exclude^.AddMask(S);
         end;
   'F' : opt.ForceRepack := isEnabled;
+  'G' : if length(ParmStr) >= 2
+         then begin
+               case UpCase(ParmStr[2]) of
+                'T' : opt.UnicodeOutput := FALSE;
+                'U' : opt.UnicodeOutput := TRUE;
+                else Stop(2, ParmStr);
+               end;
+               SetRC(2);
+               ApplyOutputMode;
+              end
+         else Stop(2, ParmStr);
   '?',
   'H' : Stop(1, '');
   'I' : opt.ForceIdle := isEnabled;

@@ -12,6 +12,7 @@ const
  msgProgHeader3   = 102;
  msgProgHeader4   = 103;
  msgProgHeader5   = 104;
+ msgProgHeaderX   = 623;
  msgProgHeader6   = 105;
  msgDone          = 106;
  msgMore          = 107;
@@ -206,6 +207,10 @@ const
  msgListCfg       = 480;
  msgListSel       = 481;
 
+ msgOutputMode    = 620;
+ msgUTF8          = 621;
+ msgTraditional   = 622;
+
  msgHelpFirst     = 500;
  msgHelpLast      = 616;
 
@@ -314,6 +319,7 @@ const
   QueryCfgList : boolean;
   DiscardXOpts : boolean;
   ColoredOutput: boolean;
+  UnicodeOutput: boolean;
   UseStdOut    : boolean;
   AllowZTrunc  : boolean;
   tresholdStub : Longint;
@@ -360,6 +366,7 @@ const
   QueryCfgList : FALSE;
   DiscardXOpts : FALSE;
   ColoredOutput: TRUE;
+  UnicodeOutput: {$IFDEF UNIX}TRUE{$ELSE}FALSE{$ENDIF};
   UseStdOut    : FALSE;
   AllowZTrunc  : TRUE;
   tresholdStub : 0;
@@ -407,15 +414,131 @@ var
 
 procedure SetColor(Color : Byte);
 procedure ClearToEOL;
+procedure ConfigureOutputTTY;
+function OutputCP437(const S : string) : string;
+function OutputChar(C : Char) : string;
+function OutputResource(ID : Longint) : string;
+function OutputWidth(const S : string) : Integer;
 
 Implementation uses Crt, StrOp{$IFDEF UNIX}, termio{$ENDIF};
+
+{$IFDEF UNIX}
+var
+  SavedTTY : Termios;
+  SavedTTYFlags : Boolean = FALSE;
+  UnicodeTTYActive : Boolean = FALSE;
+
+{ CRT initializes the terminal for its own screen writer.  In that mode
+  the kernel may not map LF to CR/LF, so ordinary UTF-8 stdout produces
+  the diagonal output seen when /GU is used on a real terminal.  Preserve
+  CRT's other tty settings and change only the output processing flags. }
+procedure ConfigureOutputTTY;
+var
+  TTY : Termios;
+begin
+  UnicodeTTYActive := FALSE;
+  if RedirOutput or (TCGetAttr(1, TTY) <> 0) then Exit;
+  if not SavedTTYFlags then begin
+    SavedTTY := TTY;
+    SavedTTYFlags := TRUE;
+  end;
+  if Opt.UnicodeOutput then
+    TTY.c_oflag := TTY.c_oflag or OPOST or ONLCR
+  else
+    TTY.c_oflag := (TTY.c_oflag and not (OPOST or ONLCR)) or
+                   (SavedTTY.c_oflag and (OPOST or ONLCR));
+  if TCSetAttr(1, TCSANOW, TTY) = 0 then
+    UnicodeTTYActive := Opt.UnicodeOutput;
+end;
+{$ELSE}
+procedure ConfigureOutputTTY;
+begin
+end;
+{$ENDIF}
+
+{ Convert only text known to be CP437.  Filenames received from Unix must
+  stay in their native encoding and must never pass through this function. }
+function OutputCP437(const S : string) : string;
+const
+ CodePoints : array[$80..$FF] of Word = (
+  $00C7, $00FC, $00E9, $00E2, $00E4, $00E0, $00E5, $00E7,
+  $00EA, $00EB, $00E8, $00EF, $00EE, $00EC, $00C4, $00C5,
+  $00C9, $00E6, $00C6, $00F4, $00F6, $00F2, $00FB, $00F9,
+  $00FF, $00D6, $00DC, $00A2, $00A3, $00A5, $20A7, $0192,
+  $00E1, $00ED, $00F3, $00FA, $00F1, $00D1, $00AA, $00BA,
+  $00BF, $2310, $00AC, $00BD, $00BC, $00A1, $00AB, $00BB,
+  $2591, $2592, $2593, $2502, $2524, $2561, $2562, $2556,
+  $2555, $2563, $2551, $2557, $255D, $255C, $255B, $2510,
+  $2514, $2534, $252C, $251C, $2500, $253C, $255E, $255F,
+  $255A, $2554, $2569, $2566, $2560, $2550, $256C, $2567,
+  $2568, $2564, $2565, $2559, $2558, $2552, $2553, $256B,
+  $256A, $2518, $250C, $2588, $2584, $258C, $2590, $2580,
+  $03B1, $00DF, $0393, $03C0, $03A3, $03C3, $00B5, $03C4,
+  $03A6, $0398, $03A9, $03B4, $221E, $03C6, $03B5, $2229,
+  $2261, $00B1, $2265, $2264, $2320, $2321, $00F7, $2248,
+  $00B0, $2219, $00B7, $221A, $207F, $00B2, $25A0, $00A0);
+var
+ I, B, AddBytes : Integer;
+ U : Word;
+begin
+ if not Opt.UnicodeOutput then begin Result := S; exit; end;
+ Result := '';
+ for I := 1 to Length(S) do begin
+   B := Ord(S[I]);
+   if B < $80 then begin
+     if Length(Result) = 255 then Break;
+     Result := Result + S[I];
+   end
+   else begin
+     U := CodePoints[B];
+     if U < $800 then AddBytes := 2 else AddBytes := 3;
+     { ShortString is limited to 255 bytes.  Never truncate halfway
+       through a UTF-8 sequence at that boundary. }
+     if Length(Result) + AddBytes > 255 then Break;
+     if U < $800 then
+       Result := Result + Chr($C0 or (U shr 6)) +
+                     Chr($80 or (U and $3F))
+     else
+       Result := Result + Chr($E0 or (U shr 12)) +
+                     Chr($80 or ((U shr 6) and $3F)) +
+                     Chr($80 or (U and $3F));
+   end;
+ end;
+end;
+
+function OutputChar(C : Char) : string;
+begin
+ OutputChar := OutputCP437(C);
+end;
+
+function OutputResource(ID : Longint) : string;
+begin
+ OutputResource := OutputCP437(SysLib.GetResourceString(ID));
+end;
+
+{ Screen spacing is measured in characters, not UTF-8 bytes. }
+function OutputWidth(const S : string) : Integer;
+var I : Integer;
+begin
+ if not Opt.UnicodeOutput then begin Result := Length(S); exit; end;
+ Result := 0;
+ for I := 1 to Length(S) do
+   if (Ord(S[I]) and $C0) <> $80 then Inc(Result);
+end;
 
 procedure SetColor;
 const
  ColorTranslate : array[0..15] of Byte =
  (0, 7, 7, 7, 7, 7, 7, 7, 8, 7, 15, 15, 15, 15, 15, 15);
+{$IFDEF UNIX}
+ FGColors : array[0..7] of Byte = (30, 34, 32, 36, 31, 35, 33, 37);
+ BGColors : array[0..7] of Byte = (40, 44, 42, 46, 41, 45, 43, 47);
+{$ENDIF}
 var
  B,F : Byte;
+{$IFDEF UNIX}
+ FG,BG : Byte;
+{$ENDIF}
 begin
  if opt.ColoredOutput
   then textAttr := Color
@@ -424,6 +547,18 @@ begin
         F := Color and $0F;
         textAttr := ColorTranslate[B] * 16 + ColorTranslate[F];
        end;
+{$IFDEF UNIX}
+ { Direct UTF-8 writes bypass the CRT renderer, so textAttr alone cannot
+   color them.  Emit terminal colors only on an interactive Unicode tty. }
+ if UnicodeTTYActive then begin
+   F := textAttr and $0F;
+   B := (textAttr shr 4) and $07;
+   FG := FGColors[F and $07];
+   if F and $08 <> 0 then Inc(FG, 60);
+   BG := BGColors[B];
+   Write(Output, #27'[', FG, ';', BG, 'm');
+ end;
+{$ENDIF}
 end;
 
 procedure ClearToEOL;
@@ -431,8 +566,14 @@ var
  Spaces : Integer;
 begin
  if not RedirOutput
-  then if opt.UseStdOut
+  then if opt.UseStdOut or opt.UnicodeOutput
         then begin
+{$IFDEF UNIX}
+              if UnicodeTTYActive then begin
+                Write(Output, #27'[K');
+                Exit;
+              end;
+{$ENDIF}
               Spaces := succ(lo(WindMax)) - WhereX;
               Write(strg(' ', Spaces), strg(#8, Spaces));
              end
