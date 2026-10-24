@@ -16,6 +16,12 @@ Native build on Unix-like platforms:
 Build artifacts will be created in an appropriately named `./build/`
 subdirectory.
 
+## Notes
+
+Other systems that offer **Free Pascal** (*e.g.*, AIX, OS/2, DOS, AmigaOS,
+MorphOS, AROS, Haiku, Solaris, macOS, FreeBSD) are untested, but are likely
+to "just work" or be easily supported.
+
 ## Cross-compilation
 
 If the appropriate `binutils` and `fpc-units` packages are installed
@@ -46,5 +52,5 @@ env FPCARCH=x86_64  FPCOS=win64 ./build.sh
 
 ## License
 
-**lxLite** is made distributed under the terms of the
+**lxLite** is distributed under the terms of the
 [GNU General Public License, version 2](COPYING).
