@@ -60,6 +60,7 @@ const
  pkfLempelZiv     = $02000000;{Pack using kinda Lempel-Ziv(WARP ONLY!)}
  pkfFixups        = $04000000;{Pack fixups}
  pkfSixPack       = $08000000;
+ pkfLempelOptimal = $10000000;{Optional byte-optimal method 2 encoder}
 type
  pFixupCollection = ^tFixupCollection;
  tFixupCollection = object(tCollection)
@@ -153,7 +154,7 @@ type
   destructor  Destroy;virtual;
  end;
 
-Implementation uses Dos, {$IFDEF OS2}os2base, {$ENDIF} pack2;
+Implementation uses Dos, {$IFDEF OS2}os2base, {$ENDIF} pack2, LZOptimal;
 
 const
   open_share_DenyWrite = $20;
@@ -656,6 +657,41 @@ skip:     Register(tOf, 1);
 locEx:
  FreeMem(ChainHead, (1 shl 12) * 2);
  FreeMem(Chain, srcDataSize * 2);
+end;
+
+function PackMethod2Selected(var srcData, dstData; srcDataSize: Longint;
+                             var dstDataSize: Longint; Optimal: Boolean): Boolean;
+var
+ Capacity, GreedySize, OptimalSize: Longint;
+ Temporary: Pointer;
+ GreedyOK, OptimalOK: Boolean;
+begin
+ if not Optimal then
+  begin
+   PackMethod2Selected := PackMethod2(srcData, dstData, srcDataSize, dstDataSize);
+   exit;
+  end;
+ Capacity := dstDataSize;
+ GreedySize := Capacity;
+ GreedyOK := PackMethod2(srcData, dstData, srcDataSize, GreedySize);
+ OptimalOK := FALSE;
+ Temporary := nil;
+ if Capacity > 0 then GetMem(Temporary, Capacity);
+ if Temporary <> nil then
+  begin
+   OptimalSize := Capacity;
+   OptimalOK := LZOptimal.PackMethod2Optimal(srcData, Temporary^,
+                                            srcDataSize, OptimalSize);
+   if OptimalOK and ((not GreedyOK) or (OptimalSize < GreedySize)) then
+    begin
+     Move(Temporary^, dstData, OptimalSize);
+     dstDataSize := OptimalSize;
+    end
+   else if GreedyOK then dstDataSize := GreedySize;
+   FreeMem(Temporary, Capacity);
+  end
+ else if GreedyOK then dstDataSize := GreedySize;
+ PackMethod2Selected := GreedyOK or OptimalOK;
 end;
 
 function PackMethod3(var srcData,dstData; srcDataSize : longint; var dstDataSize : Longint) : boolean;
@@ -2983,15 +3019,17 @@ begin
                  New(aFx, Clone(Fx));
                  PackVer2;
                  ps1 := Header.lxPageSize;
-                 if PackMethod2(Pages^[pred(P)]^, cPage^, Header.lxPageSize -
-                     MemScanBwd(Pages^[pred(P)]^, Header.lxPageSize, 0), ps1)
+                 if PackMethod2Selected(Pages^[pred(P)]^, cPage^, Header.lxPageSize -
+                     MemScanBwd(Pages^[pred(P)]^, Header.lxPageSize, 0), ps1,
+                     packFlags and pkfLempelOptimal <> 0)
                   then Inc(ps1, FixupsSize(Fx))
                   else ps1 := $7FFFFFFF;
                  Xchg(Fx, aFx, sizeOf(Pointer));
                  PackVer4;
                  ps2 := Header.lxPageSize;
-                 if PackMethod2(Pages^[pred(P)]^, cPage^, Header.lxPageSize -
-                     MemScanBwd(Pages^[pred(P)]^, Header.lxPageSize, 0), ps2)
+                 if PackMethod2Selected(Pages^[pred(P)]^, cPage^, Header.lxPageSize -
+                     MemScanBwd(Pages^[pred(P)]^, Header.lxPageSize, 0), ps2,
+                     packFlags and pkfLempelOptimal <> 0)
                   then Inc(ps2, FixupsSize(Fx))
                   else ps2 := $7FFFFFFF;
                  if ps1 <= ps2
@@ -3244,7 +3282,8 @@ begin
              (not PackMethod1(Pages^[pred(I)]^, Bf1^, PageSize, S1, maxLen[packFlags and pkfRunLengthLvl]))
            then S1 := $7FFFFFFF;
           if (packFlags and pkfLempelZiv = 0) or
-             (not PackMethod2(Pages^[pred(I)]^, Bf2^, PageSize, S2))
+             (not PackMethod2Selected(Pages^[pred(I)]^, Bf2^, PageSize, S2,
+                                     packFlags and pkfLempelOptimal <> 0))
            then S2 := $7FFFFFFF;
           if (packFlags and pkfSixPack = 0) or (PageSize < 64) or
              (not PackMethod3(Pages^[pred(I)]^, Bf3^, PageSize, S3))

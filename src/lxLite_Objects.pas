@@ -1037,7 +1037,10 @@ begin
                else J := msgUnknownType;
               end;
         Write(FormatStr(msgRunLength, [OutputResource(I)])); NL;
-        Write(FormatStr(msgLempelZiv, [ONOFF[opt.PackMode and pkfLempelZiv <> 0]])); NL;
+        if opt.PackMode and pkfLempelOptimal <> 0
+         then S := OutputResource(msgLZoptimal)
+         else S := ONOFF[opt.PackMode and pkfLempelZiv <> 0];
+        Write(FormatStr(msgLempelZiv, [S])); NL;
         Write(FormatStr(msgSixPack, [ONOFF[opt.PackMode and pkfSixPack <> 0]])); NL;
         Write(FormatStr(msgFixupsPack, [OutputResource(J)])); NL;
        end;
@@ -1296,9 +1299,10 @@ begin
                       parmHandler := 3;
                       if length(ParmStr) > 2
                        then case upCase(ParmStr[3]) of
-                             '1' : opt.PackMode := opt.PackMode or pkfLempelZiv;
-                             'N' : opt.PackMode := opt.PackMode and not pkfLempelZiv;
-                             '3' : opt.PackMode := opt.PackMode and not pkfLempelZiv or pkfSixPack;
+                             '1' : opt.PackMode := (opt.PackMode or pkfLempelZiv) and not pkfLempelOptimal;
+                             '2' : opt.PackMode := opt.PackMode or pkfLempelZiv or pkfLempelOptimal;
+                             'N' : opt.PackMode := opt.PackMode and not (pkfLempelZiv or pkfLempelOptimal);
+                             '3' : opt.PackMode := (opt.PackMode and not (pkfLempelZiv or pkfLempelOptimal)) or pkfSixPack;
                              else Stop(2, parmStr);
                             end
                        else Stop(2, parmStr);
