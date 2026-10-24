@@ -39,3 +39,12 @@ env FPCARCH=x86_64  FPCOS=linux ./build.sh
 env FPCARCH=i386    FPCOS=win32 ./build.sh
 env FPCARCH=x86_64  FPCOS=win64 ./build.sh
 ```
+
+## Downloads
+
+[**Pre-built binaries are available to download.**](https://github.com/johnsonjh/lxlite/releases/latest/)
+
+## License
+
+**lxLite** is made distributed under the terms of the
+[GNU General Public License, version 2](COPYING).
