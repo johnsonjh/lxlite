@@ -4,12 +4,12 @@ StringTable
 begin
  100 "Ú[ lxLite ]ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÂ[ Version %s ]¿"
 /* YOU ARE *NOT* ALLOWED TO CHANGE THE FOLLOWING LINE */
- 101 "Ã Copyright 1996,97 by FRIENDS software       Ã    All rights   ´"
- 102 "Ã Copyright 2001,03 by Max Alekseyev          Ã     reserved    ´"
- 103 "Ã Copyright 2008-10 by OS/4 team              Ã                 ´"
- 104 "Ã Copyright 2011    by Steven H. Levine       Ã                 ´"
- 623 "Ã Copyright 2017-23 by bww bitwise works GmbH Ã                 ´"
- 105 "Ã Copyright 2026    by Jeffrey H. Johnson     ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ"
+ 101 "Ã Copyright 1996,97 by FRIENDS software       Ã     All rights    ´"
+ 102 "Ã Copyright 2001,03 by Max Alekseyev          Ã      reserved     ´"
+ 103 "Ã Copyright 2008-10 by OS/4 team              Ã                   ´"
+ 104 "Ã Copyright 2011    by Steven H. Levine       Ã    GNU GPL v2.0   ´"
+ 623 "Ã Copyright 2017-23 by bww bitwise works GmbH Ã                   ´"
+ 105 "Ã Copyright 2026    by Jeffrey H. Johnson     ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ"
  106 "À´Done"
  107 "[Enter] Next Line   [Space] Next Page   [Esc] Abort"
  108 "Ã Invalid command line parameter %s"
