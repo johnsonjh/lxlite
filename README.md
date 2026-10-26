@@ -35,15 +35,15 @@ fpc-units-x86_64-win64 fpc-cross-aarch64 fpc-cross-arm fpc-cross-i386
 ```
 
 ```sh
-env FPCARCH=aarch64 FPCOS=linux ./build.sh
-env FPCARCH=arm     FPCOS=linux ./build.sh
-env FPCARCH=i386    FPCOS=linux ./build.sh
-env FPCARCH=x86_64  FPCOS=linux ./build.sh
+env FPCARCH="aarch64" FPCOS="linux" ./build.sh
+env FPCARCH="arm"     FPCOS="linux" ./build.sh
+env FPCARCH="i386"    FPCOS="linux" ./build.sh
+env FPCARCH="x86_64"  FPCOS="linux" ./build.sh
 ```
 
 ```sh
-env FPCARCH=i386    FPCOS=win32 ./build.sh
-env FPCARCH=x86_64  FPCOS=win64 ./build.sh
+env FPCARCH="i386"    FPCOS="win32" ./build.sh
+env FPCARCH="x86_64"  FPCOS="win64" ./build.sh
 ```
 
 ## Downloads
